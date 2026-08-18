@@ -76,6 +76,7 @@ export default function App() {
   
   // UI State
   const [view, setView] = useState('timeline');
+  const [timelineZoom, setTimelineZoom] = useState(44);
   const [showLogin, setShowLogin] = useState(false);
   const [showTeamModal, setShowTeamModal] = useState(false);
   const [showTaskModal, setShowTaskModal] = useState(false);
@@ -450,14 +451,28 @@ export default function App() {
               <div className="p-2.5 bg-violet-50 text-violet-600 rounded-2xl"><CalendarIcon size={20}/></div>
               Project Schedule
             </h2>
-            <div className="flex bg-zinc-100 rounded-2xl p-1.5 border border-zinc-200/60">
-              <button onClick={() => setView('timeline')} className={`px-5 py-2 text-xs font-bold rounded-xl transition-all duration-200 ${view === 'timeline' ? 'bg-white shadow-sm text-zinc-900' : 'text-zinc-500 hover:text-zinc-700'}`}>Timeline</button>
-              <button onClick={() => setView('calendar')} className={`px-5 py-2 text-xs font-bold rounded-xl transition-all duration-200 ${view === 'calendar' ? 'bg-white shadow-sm text-zinc-900' : 'text-zinc-500 hover:text-zinc-700'}`}>Calendar</button>
+            <div className="flex items-center gap-3">
+              {view === 'timeline' && (
+                <div className="hidden sm:flex items-center gap-2.5 bg-zinc-50/80 px-4 py-2 rounded-2xl border border-zinc-200/60 shadow-sm animate-in fade-in">
+                  <span className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Zoom</span>
+                  <input 
+                    type="range" min="10" max="100" 
+                    value={timelineZoom} 
+                    onChange={e => setTimelineZoom(Number(e.target.value))} 
+                    className="w-24 h-1.5 bg-zinc-200 rounded-lg appearance-none cursor-pointer accent-violet-600"
+                    title="Adjust timeline scale"
+                  />
+                </div>
+              )}
+              <div className="flex bg-zinc-100 rounded-2xl p-1.5 border border-zinc-200/60">
+                <button onClick={() => setView('timeline')} className={`px-5 py-2 text-xs font-bold rounded-xl transition-all duration-200 ${view === 'timeline' ? 'bg-white shadow-sm text-zinc-900' : 'text-zinc-500 hover:text-zinc-700'}`}>Timeline</button>
+                <button onClick={() => setView('calendar')} className={`px-5 py-2 text-xs font-bold rounded-xl transition-all duration-200 ${view === 'calendar' ? 'bg-white shadow-sm text-zinc-900' : 'text-zinc-500 hover:text-zinc-700'}`}>Calendar</button>
+              </div>
             </div>
           </div>
           <div className="border border-zinc-200/60 rounded-2xl overflow-auto bg-[#FAFAFA] p-6 shadow-inner" style={{ height: '460px' }}>
             {view === 'timeline' ? (
-              <Timeline tasks={tasks} onTaskClick={(t) => { if(canEditTask(t)) { setEditingTask(t); setShowTaskModal(true); } else { showAlert("Access Denied", "You don't have permission to edit this task."); } }} />
+              <Timeline tasks={tasks} zoomLevel={timelineZoom} onTaskClick={(t) => { if(canEditTask(t)) { setEditingTask(t); setShowTaskModal(true); } else { showAlert("Access Denied", "You don't have permission to edit this task."); } }} />
             ) : (
               <Calendar tasks={tasks} onTaskClick={(t) => { if(canEditTask(t)) { setEditingTask(t); setShowTaskModal(true); } else { showAlert("Access Denied", "You don't have permission to edit this task."); } }} />
             )}
@@ -1128,7 +1143,7 @@ function ChatPanel({ db, appId, userRole, team, showAlert }) {
   );
 }
 
-function Timeline({ tasks, onTaskClick }) {
+function Timeline({ tasks, zoomLevel, onTaskClick }) {
   if (!tasks.length) return (
      <div className="h-full flex flex-col items-center justify-center text-zinc-400 gap-3">
         <div className="w-12 h-12 bg-zinc-100 rounded-2xl flex items-center justify-center"><CalendarIcon size={20} className="text-zinc-300"/></div>
@@ -1143,7 +1158,7 @@ function Timeline({ tasks, onTaskClick }) {
   maxDate.setDate(maxDate.getDate() + 14);
   
   const totalDays = Math.ceil((maxDate - minDate) / (1000 * 60 * 60 * 24));
-  const dayWidth = 44; 
+  const dayWidth = zoomLevel || 44; 
 
   return (
     <div className="relative min-w-max min-h-full pb-8">
