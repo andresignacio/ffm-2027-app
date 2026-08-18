@@ -202,6 +202,27 @@ export default function App() {
     }
   };
 
+  const updateTaskDates = async (taskId, startDate, endDate) => {
+    const task = tasks.find(t => t.id === taskId);
+
+    if (!task || !canEditTask(task)) {
+      showAlert("Access Denied", "You don't have permission to move this task.", true);
+      return false;
+    }
+
+    try {
+      await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'tasks', taskId), {
+        startDate,
+        endDate
+      });
+      return true;
+    } catch (err) {
+      console.error("Failed to update task dates:", err);
+      showAlert("Error", "Could not save the new task dates. Please try again.", true);
+      return false;
+    }
+  };
+
   const deleteTask = async (id) => {
     showAlert("Delete Task", "Are you sure you want to permanently delete this task?", false, async () => {
       try {
@@ -439,7 +460,6 @@ export default function App() {
         </div>
       </header>
 
-      {}
       <main id="report-content" className="max-w-7xl mx-auto space-y-8">
         <section className="bg-white rounded-[2rem] shadow-[0_10px_40px_rgb(0,0,0,0.03)] border border-zinc-200/50 p-6 lg:p-8">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
@@ -468,14 +488,31 @@ export default function App() {
           </div>
           <div className="border border-zinc-200/60 rounded-3xl overflow-auto bg-white p-6 shadow-sm relative custom-scrollbar" style={{ height: '460px' }}>
             {view === 'timeline' ? (
-              <Timeline tasks={tasks} zoomLevel={timelineZoom} onTaskClick={(t) => { if(canEditTask(t)) { setEditingTask(t); setShowTaskModal(true); } else { showAlert("Access Denied", "You don't have permission to edit this task."); } }} />
+              <Timeline
+                tasks={tasks}
+                zoomLevel={timelineZoom}
+                canEditTask={canEditTask}
+                onTaskDateChange={updateTaskDates}
+                onTaskClick={(t) => {
+                  if(canEditTask(t)) {
+                    setEditingTask(t);
+                    setShowTaskModal(true);
+                  } else {
+                    showAlert("Access Denied", "You don't have permission to edit this task.");
+                  }
+                }}
+                onTaskCreate={userRole.role !== 'viewer' && userRole.role !== 'guest' ? (dates) => { setEditingTask(dates); setShowTaskModal(true); } : undefined}
+              />
             ) : (
-              <Calendar tasks={tasks} onTaskClick={(t) => { if(canEditTask(t)) { setEditingTask(t); setShowTaskModal(true); } else { showAlert("Access Denied", "You don't have permission to edit this task."); } }} />
+              <Calendar 
+                tasks={tasks} 
+                onTaskClick={(t) => { if(canEditTask(t)) { setEditingTask(t); setShowTaskModal(true); } else { showAlert("Access Denied", "You don't have permission to edit this task."); } }} 
+                onTaskCreate={userRole.role !== 'viewer' && userRole.role !== 'guest' ? (dates) => { setEditingTask(dates); setShowTaskModal(true); } : undefined}
+              />
             )}
           </div>
         </section>
 
-        {}
         <section>
            <div className="flex items-center gap-3 mb-6 px-2">
              <div className="p-2.5 bg-violet-50 text-violet-600 rounded-2xl"><Clock size={20}/></div>
@@ -539,10 +576,8 @@ export default function App() {
                                    )}
                                 </div>
                                 
-                                {/* New Divided Audit & Comment Section */}
                                 <div className="mt-5 pt-4 border-t border-zinc-200/60 space-y-4">
                                   
-                                  {/* Section 1: Progress Updates (Audit Log) */}
                                   <details className="group/details" open={task.updates?.length > 0}>
                                     <summary className={`text-xs cursor-pointer flex items-center gap-2 transition-colors select-none ${task.updates?.length > 0 ? 'font-bold text-emerald-600' : 'font-semibold text-zinc-400 hover:text-zinc-600'}`}>
                                       <TrendingUp size={14}/> {task.updates?.length || 0} Progress Updates
@@ -564,7 +599,6 @@ export default function App() {
                                     </div>
                                   </details>
 
-                                  {/* Section 2: General Comments */}
                                   <details className="group/details" open={task.comments?.length > 0}>
                                     <summary className={`text-xs cursor-pointer flex items-center gap-2 transition-colors select-none ${task.comments?.length > 0 ? 'font-bold text-violet-600' : 'font-semibold text-zinc-400 hover:text-zinc-600'}`}>
                                       <MessageSquare size={14}/> {task.comments?.length || 0} Comments
@@ -599,10 +633,9 @@ export default function App() {
         </section>
       </main>
 
-      {}
       {userRole.role !== 'guest' && <ChatPanel db={db} appId={appId} userRole={userRole} team={team} showAlert={showAlert} />}
 
-      {/* New Progress Update Modal */}
+      {/* Progress Update Modal */}
       {progressUpdate && (
         <div className="fixed inset-0 bg-zinc-900/20 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200">
           <div className="bg-white rounded-[2rem] shadow-2xl border border-zinc-100 w-full max-w-sm p-8 animate-in zoom-in-95 duration-200">
@@ -627,6 +660,7 @@ export default function App() {
         </div>
       )}
 
+      {/* Alert Modal */}
       {alertConfig && (
         <div className="fixed inset-0 bg-zinc-900/20 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200">
           <div className="bg-white rounded-[2rem] shadow-2xl border border-zinc-100 w-full max-w-sm p-8 animate-in zoom-in-95 duration-200">
@@ -645,6 +679,7 @@ export default function App() {
         </div>
       )}
 
+      {/* Password Modal */}
       {showPasswordModal && (
         <div className="fixed inset-0 bg-zinc-900/20 backdrop-blur-sm z-[60] flex items-center justify-center p-4 animate-in fade-in duration-200">
           <div className="bg-white rounded-[2rem] shadow-2xl border border-zinc-100 w-full max-w-sm p-8 animate-in zoom-in-95 duration-200">
@@ -670,6 +705,7 @@ export default function App() {
         </div>
       )}
 
+      {/* Login Modal */}
       {showLogin && (
         <div className="fixed inset-0 bg-zinc-900/20 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
           <div className="bg-white rounded-[2rem] shadow-2xl border border-zinc-100 w-full max-w-sm p-8 animate-in zoom-in-95 duration-200">
@@ -700,6 +736,7 @@ export default function App() {
         </div>
       )}
 
+      {/* Team Modal */}
       {showTeamModal && (
         <div className="fixed inset-0 bg-zinc-900/20 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
           <div className="bg-white rounded-[2rem] shadow-2xl border border-zinc-100 w-full max-w-md p-8 animate-in zoom-in-95 duration-200">
@@ -868,6 +905,14 @@ function TaskFormModal({ task, onClose, onSave, subgroups, assignees }) {
   const [endDate, setEndDate] = useState(task?.endDate || '');
   const [color, setColor] = useState(task?.color || '#7c3aed');
 
+  useEffect(() => {
+    const handleEsc = (e) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleEsc);
+    return () => window.removeEventListener('keydown', handleEsc);
+  }, [onClose]);
+
   const presetColors = ['#ef4444', '#f97316', '#f59e0b', '#84cc16', '#22c55e', '#14b8a6', '#06b6d4', '#3b82f6', '#6366f1', '#7c3aed', '#a855f7', '#d946ef', '#ec4899', '#f43f5e', '#52525b', '#18181b'];
 
   const handleSubmit = (e) => {
@@ -881,7 +926,7 @@ function TaskFormModal({ task, onClose, onSave, subgroups, assignees }) {
   return (
     <div className="fixed inset-0 bg-zinc-900/20 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
       <div className="bg-white rounded-[2rem] shadow-2xl border border-zinc-100 w-full max-w-md p-8 max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-200 custom-scrollbar">
-        <h2 className="text-xl font-black tracking-tight mb-6 text-zinc-900">{task ? 'Edit Task' : 'New Task'}</h2>
+        <h2 className="text-xl font-black tracking-tight mb-6 text-zinc-900">{task && task.id ? 'Edit Task' : 'New Task'}</h2>
         <form onSubmit={handleSubmit} className="space-y-5">
           <div>
             <label className="block text-xs font-bold text-zinc-700 mb-1.5 ml-1 uppercase tracking-wider">Task Name</label>
@@ -1227,49 +1272,295 @@ function ChatPanel({ db, appId, userRole, team, showAlert }) {
   );
 }
 
-function Timeline({ tasks, zoomLevel, onTaskClick }) {
-  if (!tasks.length) return (
-     <div className="h-full flex flex-col items-center justify-center text-zinc-400 gap-3">
-        <div className="w-12 h-12 bg-zinc-100 rounded-2xl flex items-center justify-center"><CalendarIcon size={20} className="text-zinc-300"/></div>
-        <p className="font-semibold text-sm">No tasks to display</p>
-     </div>
-  );
-  
-  const allDates = tasks.flatMap(t => [new Date(t.startDate), new Date(t.endDate)]);
-  const minDate = new Date(Math.min(...allDates));
+function Timeline({
+  tasks,
+  zoomLevel,
+  onTaskClick,
+  canEditTask,
+  onTaskDateChange,
+  onTaskCreate
+}) {
+  const [dragState, setDragState] = useState(null);
+  const [draftDates, setDraftDates] = useState({});
+  const [creationDrag, setCreationDrag] = useState(null);
+
+  const dragRef = useRef(null);
+  const suppressClickRef = useRef(false);
+
+  const DAY_MS = 1000 * 60 * 60 * 24;
+
+  const parseDate = (dateStr) => {
+    if (!dateStr) return null;
+
+    const [year, month, day] = dateStr.split('-').map(Number);
+    return new Date(year, month - 1, day);
+  };
+
+  const formatDateLocal = (date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  const addDays = (date, days) => {
+    const result = new Date(date);
+    result.setDate(result.getDate() + days);
+    return result;
+  };
+
+  const getTaskDates = (task) => draftDates[task.id] || {
+    startDate: task.startDate,
+    endDate: task.endDate
+  };
+
+  const beginInteraction = (e, task, mode) => {
+    if (!canEditTask(task)) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+
+    const dates = getTaskDates(task);
+
+    dragRef.current = {
+      taskId: task.id,
+      mode,
+      startX: e.clientX,
+      originalStart: dates.startDate,
+      originalEnd: dates.endDate,
+      currentStart: dates.startDate,
+      currentEnd: dates.endDate,
+      moved: false
+    };
+
+    setDragState({
+      taskId: task.id,
+      mode
+    });
+
+    suppressClickRef.current = false;
+  };
+
+  useEffect(() => {
+    const handlePointerMove = (e) => {
+      const interaction = dragRef.current;
+      if (!interaction) return;
+
+      const deltaPixels = e.clientX - interaction.startX;
+      const deltaDays = Math.round(deltaPixels / (zoomLevel || 44));
+
+      if (deltaDays === 0) return;
+
+      interaction.moved = true;
+      suppressClickRef.current = true;
+
+      const originalStart = parseDate(interaction.originalStart);
+      const originalEnd = parseDate(interaction.originalEnd);
+
+      let newStart = originalStart;
+      let newEnd = originalEnd;
+
+      if (interaction.mode === 'move') {
+        newStart = addDays(originalStart, deltaDays);
+        newEnd = addDays(originalEnd, deltaDays);
+      } else if (interaction.mode === 'resize-start') {
+        newStart = addDays(originalStart, deltaDays);
+
+        // Keep the task at least one day long.
+        if (newStart > originalEnd) {
+          newStart = originalEnd;
+        }
+      } else if (interaction.mode === 'resize-end') {
+        newEnd = addDays(originalEnd, deltaDays);
+
+        // Keep the task at least one day long.
+        if (newEnd < originalStart) {
+          newEnd = originalStart;
+        }
+      }
+
+      const startDate = formatDateLocal(newStart);
+      const endDate = formatDateLocal(newEnd);
+
+      interaction.currentStart = startDate;
+      interaction.currentEnd = endDate;
+
+      setDraftDates(prev => ({
+        ...prev,
+        [interaction.taskId]: {
+          startDate,
+          endDate
+        }
+      }));
+    };
+
+    const handlePointerUp = async () => {
+      const interaction = dragRef.current;
+      if (!interaction) return;
+
+      dragRef.current = null;
+      setDragState(null);
+
+      if (!interaction.moved) return;
+
+      const {
+        taskId,
+        originalStart,
+        originalEnd,
+        currentStart,
+        currentEnd
+      } = interaction;
+
+      if (originalStart === currentStart && originalEnd === currentEnd) {
+        return;
+      }
+
+      const saved = await onTaskDateChange(
+        taskId,
+        currentStart,
+        currentEnd
+      );
+
+      if (!saved) {
+        setDraftDates(prev => {
+          const next = { ...prev };
+          delete next[taskId];
+          return next;
+        });
+      }
+    };
+
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp);
+
+    return () => {
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+    };
+  }, [zoomLevel, onTaskDateChange, canEditTask]);
+
+  // Once Firestore sends the updated task back through onSnapshot,
+  // remove the temporary local draft for that task.
+  useEffect(() => {
+    setDraftDates(prev => {
+      let changed = false;
+      const next = { ...prev };
+
+      Object.keys(next).forEach(taskId => {
+        const task = tasks.find(t => t.id === taskId);
+
+        if (!task) {
+          delete next[taskId];
+          changed = true;
+          return;
+        }
+
+        if (
+          task.startDate === next[taskId].startDate &&
+          task.endDate === next[taskId].endDate
+        ) {
+          delete next[taskId];
+          changed = true;
+        }
+      });
+
+      return changed ? next : prev;
+    });
+  }, [tasks]);
+
+  const allDates = tasks.flatMap(t => [
+    parseDate(t.startDate),
+    parseDate(t.endDate)
+  ]).filter(Boolean);
+
+  const safeMin = allDates.length ? Math.min(...allDates) : Date.now();
+  const minDate = new Date(safeMin);
   minDate.setDate(minDate.getDate() - 7);
-  const maxDate = new Date(Math.max(...allDates));
+
+  const safeMax = allDates.length ? Math.max(...allDates) : Date.now();
+  const maxDate = new Date(safeMax);
   maxDate.setDate(maxDate.getDate() + 14);
-  
-  const totalDays = Math.ceil((maxDate - minDate) / (1000 * 60 * 60 * 24));
-  const dayWidth = zoomLevel || 44; 
+
+  const totalDays = Math.ceil((maxDate - minDate) / DAY_MS);
+  const dayWidth = zoomLevel || 44;
 
   const monthGroups = [];
   let currentMonthStr = "";
   let currentMonthDays = 0;
 
   for (let i = 0; i < totalDays; i++) {
-    const d = new Date(minDate);
-    d.setDate(d.getDate() + i);
-    const mStr = d.toLocaleString('default', { month: 'long', year: 'numeric' });
+    const d = addDays(minDate, i);
+    const mStr = d.toLocaleString('default', {
+      month: 'long',
+      year: 'numeric'
+    });
+
     if (mStr !== currentMonthStr) {
-      if (currentMonthStr !== "") monthGroups.push({ label: currentMonthStr, count: currentMonthDays });
+      if (currentMonthStr !== "") {
+        monthGroups.push({
+          label: currentMonthStr,
+          count: currentMonthDays
+        });
+      }
+
       currentMonthStr = mStr;
       currentMonthDays = 1;
     } else {
       currentMonthDays++;
     }
   }
-  if (currentMonthStr !== "") monthGroups.push({ label: currentMonthStr, count: currentMonthDays });
+
+  if (currentMonthStr !== "") {
+    monthGroups.push({
+      label: currentMonthStr,
+      count: currentMonthDays
+    });
+  }
+
+  const handleBgPointerDown = (e) => {
+    if (!onTaskCreate) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const dayIndex = Math.floor(x / dayWidth);
+    setCreationDrag({ startIdx: dayIndex, currentIdx: dayIndex });
+
+    const onPointerMove = (moveEvent) => {
+      const moveX = moveEvent.clientX - rect.left;
+      const moveDayIndex = Math.floor(moveX / dayWidth);
+      setCreationDrag(prev => prev ? { ...prev, currentIdx: moveDayIndex } : null);
+    };
+
+    const onPointerUp = (upEvent) => {
+      window.removeEventListener('pointermove', onPointerMove);
+      window.removeEventListener('pointerup', onPointerUp);
+
+      setCreationDrag(prev => {
+        if (prev) {
+          const start = Math.min(prev.startIdx, prev.currentIdx);
+          const end = Math.max(prev.startIdx, prev.currentIdx);
+          const startDate = addDays(minDate, start);
+          const endDate = addDays(minDate, end);
+          onTaskCreate({ startDate: formatDateLocal(startDate), endDate: formatDateLocal(endDate) });
+        }
+        return null;
+      });
+    };
+
+    window.addEventListener('pointermove', onPointerMove);
+    window.addEventListener('pointerup', onPointerUp);
+  };
 
   return (
     <div className="relative min-w-max min-h-full pb-8">
       <div className="flex flex-col sticky top-0 bg-white z-20 border-b border-zinc-200/60 shadow-sm">
-        
-        {/* Months Row - Sticky Horizontally */}
+        {/* Months Row */}
         <div className="flex border-b border-zinc-200/40 bg-zinc-50/50">
           {monthGroups.map((mg, idx) => (
-            <div key={idx} style={{ width: mg.count * dayWidth }} className="flex-shrink-0 border-r border-zinc-200/40 relative">
+            <div
+              key={idx}
+              style={{ width: mg.count * dayWidth }}
+              className="flex-shrink-0 border-r border-zinc-200/40 relative"
+            >
               <span className="sticky left-0 inline-block px-3 py-1.5 text-[10px] font-black text-violet-700 uppercase tracking-widest whitespace-nowrap z-30">
                 {mg.label}
               </span>
@@ -1280,65 +1571,209 @@ function Timeline({ tasks, zoomLevel, onTaskClick }) {
         {/* Days Row */}
         <div className="flex pb-1.5 pt-1.5">
           {Array.from({ length: totalDays }).map((_, i) => {
-            const d = new Date(minDate);
-            d.setDate(d.getDate() + i);
+            const d = addDays(minDate, i);
             const isToday = d.toDateString() === new Date().toDateString();
             const dayLetter = ['S', 'M', 'T', 'W', 'T', 'F', 'S'][d.getDay()];
             const isWeekend = d.getDay() === 0 || d.getDay() === 6;
-            
+
             return (
-              <div key={i} className={`flex-shrink-0 border-r border-zinc-200/40 flex flex-col items-center justify-end pb-1.5 pt-1 ${isToday ? 'bg-violet-50/80 rounded-t-xl border-violet-200' : (isWeekend ? 'bg-zinc-100' : '')}`} style={{ width: dayWidth }}>
-                <span className={`text-[8px] font-black ${isToday ? 'text-violet-600' : (isWeekend ? 'text-zinc-500' : 'text-zinc-400')}`}>{dayLetter}</span>
-                <span className={`text-[10px] font-bold ${isToday ? 'text-violet-700' : (isWeekend ? 'text-zinc-600' : 'text-zinc-800')}`}>{d.getDate()}</span>
+              <div
+                key={i}
+                className={`flex-shrink-0 border-r border-zinc-200/40 flex flex-col items-center justify-end pb-1.5 pt-1 ${
+                  isToday
+                    ? 'bg-violet-50/80 rounded-t-xl border-violet-200'
+                    : isWeekend
+                      ? 'bg-zinc-100'
+                      : ''
+                }`}
+                style={{ width: dayWidth }}
+              >
+                <span
+                  className={`text-[8px] font-black ${
+                    isToday
+                      ? 'text-violet-600'
+                      : isWeekend
+                        ? 'text-zinc-500'
+                        : 'text-zinc-400'
+                  }`}
+                >
+                  {dayLetter}
+                </span>
+                <span
+                  className={`text-[10px] font-bold ${
+                    isToday
+                      ? 'text-violet-700'
+                      : isWeekend
+                        ? 'text-zinc-600'
+                        : 'text-zinc-800'
+                  }`}
+                >
+                  {d.getDate()}
+                </span>
               </div>
             );
           })}
         </div>
       </div>
-      
+
       <div className="pt-6 space-y-3.5 relative">
-        <div className="absolute inset-0 flex pt-6 pointer-events-none z-0">
+        {/* Background day columns */}
+        <div 
+          className="absolute inset-0 flex pt-6 z-0"
+          onPointerDown={handleBgPointerDown}
+          style={{ touchAction: 'none', cursor: onTaskCreate ? 'crosshair' : 'default' }}
+        >
           {Array.from({ length: totalDays }).map((_, i) => {
-             const d = new Date(minDate);
-             d.setDate(d.getDate() + i);
-             const isWeekend = d.getDay() === 0 || d.getDay() === 6;
-             return (
-                <div key={`bg-${i}`} className={`flex-shrink-0 h-full border-r border-zinc-200/30 ${isWeekend ? 'bg-zinc-100' : ''}`} style={{ width: dayWidth }}></div>
-             )
+            const d = addDays(minDate, i);
+            const isWeekend = d.getDay() === 0 || d.getDay() === 6;
+
+            return (
+              <div
+                key={`bg-${i}`}
+                className={`flex-shrink-0 h-full border-r border-zinc-200/30 ${
+                  isWeekend ? 'bg-zinc-100' : ''
+                }`}
+                style={{ width: dayWidth }}
+              />
+            );
           })}
         </div>
 
+        {creationDrag && (
+           <div 
+             className="absolute top-6 bottom-0 bg-violet-500/20 border-2 border-violet-500 border-dashed rounded-lg z-0 pointer-events-none"
+             style={{
+               left: Math.min(creationDrag.startIdx, creationDrag.currentIdx) * dayWidth,
+               width: (Math.abs(creationDrag.currentIdx - creationDrag.startIdx) + 1) * dayWidth
+             }}
+           />
+        )}
+
         {tasks.map(task => {
-          const start = new Date(task.startDate);
-          const end = new Date(task.endDate);
-          const leftDays = Math.floor((start - minDate) / (1000 * 60 * 60 * 24));
-          const durationDays = Math.ceil((end - start) / (1000 * 60 * 60 * 24)) + 1;
-          
+          const dates = getTaskDates(task);
+          const start = parseDate(dates.startDate);
+          const end = parseDate(dates.endDate);
+
+          const leftDays = Math.floor((start - minDate) / DAY_MS);
+          const durationDays = Math.ceil((end - start) / DAY_MS) + 1;
+          const editable = canEditTask(task);
+          const isInteracting = dragState?.taskId === task.id;
+
           return (
-             <div key={task.id} className="relative h-9 group" style={{ width: totalDays * dayWidth }}>
-                <div 
-                  onClick={() => onTaskClick(task)}
-                  className="absolute h-7 top-1 rounded-xl shadow-sm border border-black/5 overflow-hidden transition-all hover:scale-[1.02] hover:shadow-md hover:ring-2 hover:ring-violet-400/50 z-10 cursor-pointer flex items-center"
-                  style={{ 
-                    left: leftDays * dayWidth, width: Math.max(durationDays * dayWidth, 12),
-                    backgroundColor: `${task.color}15`, borderLeft: `4px solid ${task.color}`
+            <div
+              key={task.id}
+              className="relative h-9 group"
+              style={{ width: totalDays * dayWidth }}
+            >
+              <div
+                onClick={(e) => {
+                  if (suppressClickRef.current) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    suppressClickRef.current = false;
+                    return;
+                  }
+
+                  onTaskClick(task);
+                }}
+                onPointerDown={(e) => {
+                  if (!editable) return;
+                  beginInteraction(e, task, 'move');
+                }}
+                className={`absolute h-7 top-1 rounded-xl shadow-sm border border-black/5 overflow-hidden flex items-center z-10 ${
+                  editable
+                    ? 'cursor-grab active:cursor-grabbing'
+                    : 'cursor-pointer'
+                } ${
+                  isInteracting
+                    ? 'ring-2 ring-violet-400 shadow-lg'
+                    : 'transition-all hover:scale-[1.02] hover:shadow-md hover:ring-2 hover:ring-violet-400/50'
+                }`}
+                style={{
+                  left: leftDays * dayWidth,
+                  width: Math.max(durationDays * dayWidth, 12),
+                  backgroundColor: `${task.color}15`,
+                  borderLeft: `4px solid ${task.color}`,
+                  touchAction: 'none',
+                  userSelect: 'none'
+                }}
+                title={
+                  editable
+                    ? `${task.name} (${dates.startDate} - ${dates.endDate}) — Drag to move; drag either edge to resize`
+                    : `${task.name} (${dates.startDate} - ${dates.endDate}) - Click to Edit`
+                }
+              >
+                {/* Left resize handle */}
+                {editable && (
+                  <div
+                    onPointerDown={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      beginInteraction(e, task, 'resize-start');
+                    }}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                    }}
+                    className="absolute left-0 top-0 bottom-0 w-3 cursor-ew-resize z-30 rounded-l-xl hover:bg-violet-500/30"
+                    style={{ touchAction: 'none' }}
+                    title="Drag to change start date"
+                  />
+                )}
+
+                {/* Progress indicator */}
+                <div
+                  className="absolute bottom-0 left-0 h-1 opacity-50 transition-all duration-300 ease-out rounded-b-xl"
+                  style={{
+                    width: `${task.progress || 0}%`,
+                    backgroundColor: task.color
                   }}
-                  title={`${task.name} (${task.progress || 0}%) - Click to Edit`}
-                >
-                  <div className="absolute bottom-0 left-0 h-1 opacity-50 transition-all duration-500 ease-out rounded-full" style={{ width: `${task.progress || 0}%`, backgroundColor: task.color }}></div>
-                  <span className="relative px-3 text-xs font-bold text-zinc-800 truncate z-10 drop-shadow-sm">{task.name}</span>
-                </div>
-             </div>
+                />
+
+                {/* Task name */}
+                <span className="relative px-3 text-xs font-bold text-zinc-800 truncate z-10 pointer-events-none drop-shadow-sm">
+                  {task.name}
+                </span>
+
+                {/* Right resize handle */}
+                {editable && (
+                  <div
+                    onPointerDown={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      beginInteraction(e, task, 'resize-end');
+                    }}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                    }}
+                    className="absolute right-0 top-0 bottom-0 w-3 cursor-ew-resize z-30 rounded-r-xl hover:bg-violet-500/30"
+                    style={{ touchAction: 'none' }}
+                    title="Drag to change end date"
+                  />
+                )}
+              </div>
+            </div>
           );
         })}
-        <div className="absolute top-0 bottom-0 border-l-2 border-dashed border-violet-400 z-0 opacity-60 pointer-events-none" style={{ left: Math.floor((new Date() - minDate) / (1000 * 60 * 60 * 24)) * dayWidth + (dayWidth/2) }}></div>
+
+        {/* Today marker */}
+        <div
+          className="absolute top-0 bottom-0 border-l-2 border-dashed border-violet-400 z-0 opacity-60 pointer-events-none"
+          style={{
+            left:
+              Math.floor((new Date() - minDate) / DAY_MS) * dayWidth +
+              dayWidth / 2
+          }}
+        />
       </div>
     </div>
   );
 }
 
-function Calendar({ tasks, onTaskClick }) {
+function Calendar({ tasks, onTaskClick, onTaskCreate }) {
   const [currentMonth, setCurrentMonth] = useState(new Date());
+  const [creationDrag, setCreationDrag] = useState(null);
   
   const getDaysInMonth = (date) => new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
   const getFirstDayOfMonth = (date) => new Date(date.getFullYear(), date.getMonth(), 1).getDay();
@@ -1371,6 +1806,34 @@ function Calendar({ tasks, onTaskClick }) {
      currentWeek.push({ dayNum, isCurrentMonth, dateStr, index: i % 7 });
      if (currentWeek.length === 7) { weeks.push(currentWeek); currentWeek = []; }
   }
+
+  useEffect(() => {
+    const handleMouseUp = () => {
+       if (creationDrag) setCreationDrag(null);
+    };
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => window.removeEventListener('mouseup', handleMouseUp);
+  }, [creationDrag]);
+
+  const handleDayMouseDown = (dateStr) => {
+     if (!onTaskCreate) return;
+     setCreationDrag({ start: dateStr, end: dateStr });
+  };
+
+  const handleDayMouseEnter = (dateStr) => {
+     if (creationDrag) setCreationDrag(prev => ({ ...prev, end: dateStr }));
+  };
+
+  const handleDayMouseUp = (dateStr) => {
+     if (creationDrag && onTaskCreate) {
+        const start = creationDrag.start;
+        const end = dateStr;
+        const finalStart = start < end ? start : end;
+        const finalEnd = start > end ? start : end;
+        onTaskCreate({ startDate: finalStart, endDate: finalEnd });
+        setCreationDrag(null);
+     }
+  };
 
   return (
     <div className="flex flex-col min-h-full pb-8">
@@ -1413,11 +1876,24 @@ function Calendar({ tasks, onTaskClick }) {
 
            return (
               <div key={wIdx} className="grid grid-cols-7 gap-px bg-zinc-200/60 flex-1 min-h-[120px] relative">
-                 {week.map((day, dIdx) => (
-                    <div key={dIdx} className={`p-2 ${day.isCurrentMonth ? 'bg-white' : 'bg-zinc-50'}`}>
-                       <span className={`text-xs font-bold ${day.isCurrentMonth ? 'text-zinc-700' : 'text-zinc-300'}`}>{day.dayNum}</span>
-                    </div>
-                 ))}
+                 {week.map((day, dIdx) => {
+                    const isDraggingThisDay = creationDrag && (
+                       (day.dateStr >= creationDrag.start && day.dateStr <= creationDrag.end) ||
+                       (day.dateStr <= creationDrag.start && day.dateStr >= creationDrag.end)
+                    );
+
+                    return (
+                       <div 
+                         key={dIdx} 
+                         className={`p-2 select-none cursor-pointer ${day.isCurrentMonth ? 'bg-white' : 'bg-zinc-50'} ${isDraggingThisDay ? 'ring-2 ring-inset ring-violet-500 bg-violet-50' : ''}`}
+                         onMouseDown={() => handleDayMouseDown(day.dateStr)}
+                         onMouseEnter={() => handleDayMouseEnter(day.dateStr)}
+                         onMouseUp={() => handleDayMouseUp(day.dateStr)}
+                       >
+                          <span className={`text-xs font-bold ${day.isCurrentMonth ? 'text-zinc-700' : 'text-zinc-300'}`}>{day.dayNum}</span>
+                       </div>
+                    );
+                 })}
                  
                  <div className="absolute inset-0 pt-8 pointer-events-none">
                     {rowSlots.map((row, rIdx) => (
