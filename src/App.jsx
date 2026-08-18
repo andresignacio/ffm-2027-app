@@ -453,7 +453,7 @@ export default function App() {
             </h2>
             <div className="flex items-center gap-3">
               {view === 'timeline' && (
-                <div className="hidden sm:flex items-center gap-2.5 bg-zinc-50/80 px-4 py-2 rounded-2xl border border-zinc-200/60 shadow-sm animate-in fade-in">
+                <div className="flex items-center gap-2.5 bg-zinc-50/80 px-4 py-2 rounded-2xl border border-zinc-200/60 shadow-sm animate-in fade-in">
                   <span className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Zoom</span>
                   <input 
                     type="range" min="10" max="100" 
