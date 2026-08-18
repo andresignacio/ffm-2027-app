@@ -90,7 +90,6 @@ export default function App() {
         const data = d.data();
         return { id: d.id, ...data, color: data.color || getTaskColor(d.id) };
       }));
-      // Instantly mark as synced when data arrives!
       setIsSynced(true);
     }, (err) => {
       console.error("Tasks sync error:", err);
@@ -366,7 +365,6 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-zinc-50 text-zinc-900 font-sans p-4 md:p-8 selection:bg-violet-100 selection:text-violet-900 pb-28">
-      {/* HEADER */}
       <header className="max-w-7xl mx-auto bg-white/70 backdrop-blur-xl rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-zinc-200/50 p-5 mb-8 flex flex-col md:flex-row justify-between items-center gap-5 sticky top-4 z-40 transition-all">
         <div>
           <h1 className="text-3xl font-black tracking-tight text-zinc-900">Flowers for Mary <span className="text-violet-600 font-bold">2027</span></h1>
@@ -428,9 +426,7 @@ export default function App() {
         </div>
       </header>
 
-      {}
       <main id="report-content" className="max-w-7xl mx-auto space-y-8">
-        {/* SCHEDULE VIEW */}
         <section className="bg-white rounded-[2rem] shadow-[0_10px_40px_rgb(0,0,0,0.03)] border border-zinc-200/50 p-6 lg:p-8">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
             <h2 className="text-xl font-bold tracking-tight text-zinc-900 flex items-center gap-3">
@@ -465,7 +461,6 @@ export default function App() {
           </div>
         </section>
 
-        {}
         <section>
            <div className="flex items-center gap-3 mb-6 px-2">
              <div className="p-2.5 bg-violet-50 text-violet-600 rounded-2xl"><Clock size={20}/></div>
@@ -551,7 +546,6 @@ export default function App() {
       {/* --- CHAT WIDGET --- */}
       {userRole.role !== 'guest' && <ChatPanel db={db} appId={appId} userRole={userRole} team={team} showAlert={showAlert} />}
 
-      {}
       {/* --- MODALS --- */}
       {alertConfig && (
         <div className="fixed inset-0 bg-zinc-900/40 backdrop-blur-md z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200">
@@ -602,7 +596,7 @@ export default function App() {
             <div className="w-12 h-12 bg-zinc-100 rounded-2xl flex items-center justify-center mb-6">
                <LogIn size={22} className="text-zinc-800"/>
             </div>
-            <h2 className="text-2xl font-black tracking-tight mb-2">Welcome back</h2>
+            <h2 className="text-xl font-black tracking-tight mb-2">Welcome back</h2>
             <p className="text-zinc-400 text-xs font-semibold mb-6">Sign in to manage tasks and chat</p>
             {loginError && <div className="mb-6 p-3 bg-rose-50 text-rose-600 text-xs font-bold rounded-2xl flex items-center gap-2 border border-rose-100"><AlertCircle size={16}/>{loginError}</div>}
             <form onSubmit={handleLogin} className="space-y-4">
@@ -807,7 +801,7 @@ function TaskFormModal({ task, onClose, onSave, subgroups, assignees }) {
   return (
     <div className="fixed inset-0 bg-zinc-900/40 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
       <div className="bg-white rounded-[2rem] shadow-2xl border border-zinc-100 w-full max-w-md p-8 max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-200 custom-scrollbar">
-        <h2 className="text-2xl font-black tracking-tight mb-6 text-zinc-900">{task ? 'Edit Task' : 'New Task'}</h2>
+        <h2 className="text-xl font-black tracking-tight mb-6 text-zinc-900">{task ? 'Edit Task' : 'New Task'}</h2>
         <form onSubmit={handleSubmit} className="space-y-5">
           <div>
             <label className="block text-xs font-bold text-zinc-700 mb-1.5 ml-1 uppercase tracking-wider">Task Name</label>
@@ -1116,7 +1110,7 @@ function ChatPanel({ db, appId, userRole, team, showAlert }) {
           </div>
        )}
 
-       <button onClick={handleToggleChat} className={`w-16 h-16 bg-zinc-900 text-white rounded-3xl shadow-[0_10px_30px_rgb(0,0,0,0.25)] items-center justify-center hover:bg-zinc-800 hover:scale-105 transition-all duration-300 relative outline-none focus:ring-4 focus:ring-zinc-500/30 ${isOpen ? 'hidden sm:flex' : 'flex'}`}>
+       <button onClick={handleToggleChat} className="w-16 h-16 bg-zinc-900 text-white rounded-3xl shadow-[0_10px_30px_rgb(0,0,0,0.25)] flex items-center justify-center hover:bg-zinc-800 hover:scale-105 transition-all duration-300 relative outline-none focus:ring-4 focus:ring-zinc-500/30">
           <MessageSquare size={26} />
           {totalUnread > 0 && !isOpen && (
              <span className="absolute -top-1.5 -right-1.5 bg-rose-500 text-white text-xs font-black w-6 h-6 rounded-full flex items-center justify-center border-2 border-white shadow-md animate-in zoom-in">{totalUnread}</span>
@@ -1163,7 +1157,6 @@ function Timeline({ tasks, zoomLevel, onTaskClick }) {
 
   return (
     <div className="relative min-w-max min-h-full pb-8">
-      {/* FIX: Removed backdrop-blur-md which breaks horizontal sticky positioning. Using solid background instead. */}
       <div className="flex flex-col sticky top-0 bg-[#FAFAFA] z-30 border-b border-zinc-200/60 shadow-sm">
         
         {/* Months Row - Sticky Horizontally */}
@@ -1183,9 +1176,13 @@ function Timeline({ tasks, zoomLevel, onTaskClick }) {
             const d = new Date(minDate);
             d.setDate(d.getDate() + i);
             const isToday = d.toDateString() === new Date().toDateString();
+            const dayLetter = ['S', 'M', 'T', 'W', 'T', 'F', 'S'][d.getDay()];
+            const isWeekend = d.getDay() === 0 || d.getDay() === 6;
+            
             return (
-              <div key={i} className={`flex-shrink-0 border-r border-zinc-200/40 flex flex-col items-center justify-end pb-1.5 ${isToday ? 'bg-violet-50/80 rounded-t-xl border-violet-200' : ''}`} style={{ width: dayWidth }}>
-                <span className={`text-[10px] font-bold ${isToday ? 'text-violet-700' : 'text-zinc-400'}`}>{d.getDate()}</span>
+              <div key={i} className={`flex-shrink-0 border-r border-zinc-200/40 flex flex-col items-center justify-end pb-1.5 pt-1 ${isToday ? 'bg-violet-100 rounded-t-xl border-violet-300' : (isWeekend ? 'bg-zinc-100/60' : '')}`} style={{ width: dayWidth }}>
+                <span className={`text-[8px] font-black ${isToday ? 'text-violet-600' : (isWeekend ? 'text-zinc-400' : 'text-zinc-400')}`}>{dayLetter}</span>
+                <span className={`text-[10px] font-bold ${isToday ? 'text-violet-700' : (isWeekend ? 'text-zinc-500' : 'text-zinc-800')}`}>{d.getDate()}</span>
               </div>
             );
           })}
@@ -1193,6 +1190,18 @@ function Timeline({ tasks, zoomLevel, onTaskClick }) {
       </div>
       
       <div className="pt-6 space-y-3.5 relative">
+        {/* Background shading for weekends in the chart body */}
+        <div className="absolute inset-0 flex pt-6 pointer-events-none z-0">
+          {Array.from({ length: totalDays }).map((_, i) => {
+             const d = new Date(minDate);
+             d.setDate(d.getDate() + i);
+             const isWeekend = d.getDay() === 0 || d.getDay() === 6;
+             return (
+                <div key={`bg-${i}`} className={`flex-shrink-0 h-full border-r border-zinc-200/20 ${isWeekend ? 'bg-zinc-50/50' : ''}`} style={{ width: dayWidth }}></div>
+             )
+          })}
+        </div>
+
         {tasks.map(task => {
           const start = new Date(task.startDate);
           const end = new Date(task.endDate);
