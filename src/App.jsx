@@ -90,6 +90,7 @@ export default function App() {
         const data = d.data();
         return { id: d.id, ...data, color: data.color || getTaskColor(d.id) };
       }));
+      // Instantly set synced to true when tasks load, fixing the "Syncing..." issue
       setIsSynced(true);
     }, (err) => {
       console.error("Tasks sync error:", err);
@@ -364,8 +365,8 @@ export default function App() {
   const staffAssignees = ["Andres", ...team.filter(t => t.role !== 'viewer').map(t => t.name)];
 
   return (
-    <div className="min-h-screen bg-zinc-50 text-zinc-900 font-sans p-4 md:p-8 selection:bg-violet-100 selection:text-violet-900 pb-28">
-      <header className="max-w-7xl mx-auto bg-white/70 backdrop-blur-xl rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-zinc-200/50 p-5 mb-8 flex flex-col md:flex-row justify-between items-center gap-5 sticky top-4 z-40 transition-all">
+    <div className="min-h-screen bg-zinc-50/50 text-zinc-900 font-sans p-4 md:p-8 selection:bg-violet-200 selection:text-violet-900 pb-28">
+      <header className="max-w-7xl mx-auto bg-white/70 backdrop-blur-xl rounded-[2rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-zinc-150/50 p-5 mb-8 flex flex-col md:flex-row justify-between items-center gap-5 sticky top-4 z-40 transition-all">
         <div>
           <h1 className="text-3xl font-black tracking-tight text-zinc-900">Flowers for Mary <span className="text-violet-600 font-bold">2027</span></h1>
           <p className="text-xs font-bold text-zinc-500 flex items-center gap-2 mt-1">
@@ -379,7 +380,7 @@ export default function App() {
             </button>
           ) : (
             <>
-              <div className="flex items-center gap-3 bg-zinc-100/80 px-4 py-2 rounded-2xl border border-zinc-200/50">
+              <div className="flex items-center gap-3 bg-zinc-50 px-4 py-2 rounded-2xl border border-zinc-150/50 hover:bg-zinc-100 transition-colors">
                 <span className="text-sm font-bold text-zinc-800 flex items-center gap-2">
                   <div className="bg-violet-100 text-violet-700 p-1.5 rounded-xl"><User size={14}/></div>
                   {userRole.username} <span className="text-zinc-400 font-medium text-xs ml-0.5">({userRole.role})</span>
@@ -392,23 +393,23 @@ export default function App() {
               
               {userRole.role === 'manager' && (
                 <>
-                  <button onClick={() => setShowTeamModal(true)} className="flex items-center gap-2 px-4 py-2.5 text-zinc-700 bg-white border border-zinc-200/80 rounded-2xl hover:bg-zinc-50 hover:border-zinc-300 transition-all shadow-sm font-bold text-sm">
+                  <button onClick={() => setShowTeamModal(true)} className="flex items-center gap-2 px-4 py-2.5 text-zinc-700 bg-white border border-zinc-150/80 rounded-2xl hover:bg-zinc-50 hover:border-zinc-300 transition-all shadow-sm font-bold text-sm">
                     <Users size={16} className="text-zinc-500" /> Users
                   </button>
-                  <div className="flex bg-white border border-zinc-200/80 rounded-2xl shadow-sm p-1 gap-1">
-                    <button onClick={handleExport} className="flex items-center justify-center p-2 text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 rounded-xl transition-colors" title="Export Backup JSON">
-                      <Download size={18} />
+                  <div className="flex bg-white border border-zinc-150/80 rounded-2xl shadow-sm p-1 gap-1">
+                    <button onClick={handleExport} className="flex items-center justify-center p-2 text-emerald-600 hover:bg-emerald-50 rounded-xl transition-colors font-semibold text-sm px-3" title="Export Data">
+                      <Download size={16} className="mr-1.5" /> Export
                     </button>
-                    <div className="w-px bg-zinc-200 my-1"></div>
-                    <label className="flex items-center justify-center p-2 text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 rounded-xl transition-colors cursor-pointer" title="Import Backup JSON">
-                      <Upload size={18} />
+                    <div className="w-px bg-zinc-150 my-1"></div>
+                    <label className="flex items-center justify-center p-2 text-blue-600 hover:bg-blue-50 rounded-xl transition-colors cursor-pointer font-semibold text-sm px-3" title="Import Data">
+                      <Upload size={16} className="mr-1.5" /> Import
                       <input type="file" onChange={handleImport} accept="application/json,.json" className="hidden" />
                     </label>
                   </div>
                 </>
               )}
               
-              <button onClick={generatePDF} className="flex items-center gap-2 px-4 py-2.5 text-zinc-700 bg-white border border-zinc-200/80 rounded-2xl hover:bg-zinc-50 hover:border-zinc-300 transition-all shadow-sm font-bold text-sm">
+              <button onClick={generatePDF} className="flex items-center gap-2 px-4 py-2.5 text-zinc-700 bg-white border border-zinc-150/80 rounded-2xl hover:bg-zinc-50 hover:border-zinc-300 transition-all shadow-sm font-bold text-sm">
                 <FileText size={16} className="text-zinc-500" /> Report
               </button>
               
@@ -427,7 +428,7 @@ export default function App() {
       </header>
 
       <main id="report-content" className="max-w-7xl mx-auto space-y-8">
-        <section className="bg-white rounded-[2rem] shadow-[0_10px_40px_rgb(0,0,0,0.03)] border border-zinc-200/50 p-6 lg:p-8">
+        <section className="bg-white rounded-[2rem] shadow-[0_10px_40px_rgb(0,0,0,0.03)] border border-zinc-150/50 p-6 lg:p-8">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
             <h2 className="text-xl font-bold tracking-tight text-zinc-900 flex items-center gap-3">
               <div className="p-2.5 bg-violet-50 text-violet-600 rounded-2xl"><CalendarIcon size={20}/></div>
@@ -435,24 +436,24 @@ export default function App() {
             </h2>
             <div className="flex flex-wrap items-center gap-4">
               {view === 'timeline' && (
-                <div className="flex items-center gap-2.5 bg-zinc-50/80 px-4 py-2 rounded-2xl border border-zinc-200/60 shadow-sm animate-in fade-in">
+                <div className="flex items-center gap-3 bg-zinc-50 px-4 py-2 rounded-2xl border border-zinc-150/60 shadow-sm animate-in fade-in zoom-in duration-200">
                   <span className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Zoom</span>
                   <input 
-                    type="range" min="10" max="100" 
+                    type="range" min="15" max="100" 
                     value={timelineZoom} 
                     onChange={e => setTimelineZoom(Number(e.target.value))} 
-                    className="w-24 h-1.5 bg-zinc-200 rounded-lg appearance-none cursor-pointer accent-violet-600"
+                    className="w-24 h-1.5 bg-zinc-150 rounded-lg appearance-none cursor-pointer accent-violet-600"
                     title="Adjust timeline scale"
                   />
                 </div>
               )}
-              <div className="flex bg-zinc-100/80 rounded-2xl p-1.5 border border-zinc-200/50">
-                <button onClick={() => setView('timeline')} className={`px-5 py-2 text-xs font-bold rounded-xl transition-all duration-300 ${view === 'timeline' ? 'bg-white shadow-md text-zinc-900' : 'text-zinc-500 hover:text-zinc-700'}`}>Timeline</button>
-                <button onClick={() => setView('calendar')} className={`px-5 py-2 text-xs font-bold rounded-xl transition-all duration-300 ${view === 'calendar' ? 'bg-white shadow-md text-zinc-900' : 'text-zinc-500 hover:text-zinc-700'}`}>Calendar</button>
+              <div className="flex bg-zinc-50 rounded-2xl p-1.5 border border-zinc-150/60">
+                <button onClick={() => setView('timeline')} className={`px-5 py-2 text-xs font-bold rounded-xl transition-all duration-300 ${view === 'timeline' ? 'bg-white shadow-sm text-zinc-900 border border-zinc-150/50' : 'text-zinc-500 hover:text-zinc-700'}`}>Timeline</button>
+                <button onClick={() => setView('calendar')} className={`px-5 py-2 text-xs font-bold rounded-xl transition-all duration-300 ${view === 'calendar' ? 'bg-white shadow-sm text-zinc-900 border border-zinc-150/50' : 'text-zinc-500 hover:text-zinc-700'}`}>Calendar</button>
               </div>
             </div>
           </div>
-          <div className="border border-zinc-200/60 rounded-3xl overflow-auto bg-[#FAFAFA] p-6 shadow-inner relative" style={{ height: '460px' }}>
+          <div className="border border-zinc-150/60 rounded-3xl overflow-auto bg-white p-6 shadow-sm relative custom-scrollbar" style={{ height: '460px' }}>
             {view === 'timeline' ? (
               <Timeline tasks={tasks} zoomLevel={timelineZoom} onTaskClick={(t) => { if(canEditTask(t)) { setEditingTask(t); setShowTaskModal(true); } else { showAlert("Access Denied", "You don't have permission to edit this task."); } }} />
             ) : (
@@ -472,34 +473,34 @@ export default function App() {
                 const avgProgress = sgTasks.length ? Math.round(sgTasks.reduce((acc, t) => acc + (t.progress || 0), 0) / sgTasks.length) : 0;
                 
                 return (
-                  <div key={sg} className="bg-white rounded-[2rem] shadow-[0_10px_40px_rgb(0,0,0,0.03)] border border-zinc-200/50 p-6 lg:p-8 flex flex-col h-full hover:shadow-[0_15px_50px_rgb(0,0,0,0.06)] transition-all duration-300">
+                  <div key={sg} className="bg-white rounded-[2rem] shadow-[0_10px_40px_rgb(0,0,0,0.03)] border border-zinc-150/50 p-6 lg:p-8 flex flex-col h-full hover:shadow-[0_15px_50px_rgb(0,0,0,0.06)] transition-all duration-300">
                      <div className="flex justify-between items-center mb-6">
                         <h3 className="text-lg font-extrabold text-zinc-900 tracking-tight">{sg}</h3>
-                        <span className="text-[10px] font-black uppercase tracking-widest px-3.5 py-1.5 bg-zinc-100 rounded-xl text-zinc-600">{avgProgress}% Done</span>
+                        <span className="text-[10px] font-black uppercase tracking-widest px-3.5 py-1.5 bg-zinc-50 rounded-xl border border-zinc-150/60 text-zinc-600">{avgProgress}% Done</span>
                      </div>
                      <div className="w-full bg-zinc-100 h-2.5 rounded-full mb-8 overflow-hidden">
                         <div className="bg-violet-600 h-full transition-all duration-700 ease-out rounded-full" style={{width: `${avgProgress}%`}}></div>
                      </div>
                      <div className="space-y-4 flex-1">
                         {sgTasks.map(task => (
-                           <div key={task.id} className="p-5 bg-zinc-50/50 rounded-3xl border border-zinc-200/50 hover:bg-white hover:border-violet-300 hover:shadow-[0_8px_30px_rgb(0,0,0,0.05)] transition-all duration-300 group relative">
+                           <div key={task.id} className="p-5 bg-zinc-50/50 rounded-3xl border border-zinc-150/50 hover:bg-white hover:border-violet-300 hover:shadow-[0_8px_30px_rgb(0,0,0,0.05)] transition-all duration-300 group relative">
                               <div className="flex justify-between items-start mb-3">
                                 <div className="flex items-center gap-3">
                                   <div className="w-3.5 h-3.5 rounded-full shadow-sm" style={{ backgroundColor: task.color }}></div>
                                   <span className="font-bold text-zinc-900 text-base">{task.name}</span>
                                 </div>
                                 {canEditTask(task) && (
-                                   <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-white/90 backdrop-blur-md rounded-xl p-1 border border-zinc-200/60 shadow-sm">
+                                   <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-white/90 backdrop-blur-md rounded-xl p-1 border border-zinc-150/60 shadow-sm">
                                      <button onClick={() => { setEditingTask(task); setShowTaskModal(true); }} className="p-2 text-zinc-400 hover:text-violet-600 hover:bg-violet-50 rounded-lg transition-colors"><Edit2 size={14}/></button>
                                      {userRole.role === 'manager' && <button onClick={() => deleteTask(task.id)} className="p-2 text-zinc-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"><Trash2 size={14}/></button>}
                                    </div>
                                 )}
                               </div>
                               <div className="flex justify-between items-center text-xs font-bold text-zinc-500 mb-5 px-1">
-                                 <span className="flex items-center gap-1.5 bg-white px-3 py-1.5 rounded-xl border border-zinc-200/60 shadow-sm"><User size={12} className="text-violet-600"/> {task.assignee}</span>
+                                 <span className="flex items-center gap-1.5 bg-white px-3 py-1.5 rounded-xl border border-zinc-150/60 shadow-sm"><User size={12} className="text-violet-600"/> {task.assignee}</span>
                                  <span className="text-zinc-400 font-semibold">{formatDate(task.startDate)} - {formatDate(task.endDate)}</span>
                               </div>
-                              <div className="flex items-center gap-4 bg-white p-3.5 rounded-2xl border border-zinc-200/60 shadow-sm">
+                              <div className="flex items-center gap-4 bg-white p-3.5 rounded-2xl border border-zinc-150/60 shadow-sm">
                                  <input 
                                    type="range" min="0" max="100" 
                                    value={task.progress || 0} disabled={!canEditTask(task)}
@@ -510,7 +511,7 @@ export default function App() {
                                  <span className="text-xs font-black text-zinc-700 w-10 text-right">{task.progress || 0}%</span>
                               </div>
                               
-                              <div className="mt-5 pt-4 border-t border-zinc-200/60">
+                              <div className="mt-5 pt-4 border-t border-zinc-150/60">
                                 <details className="group/details" open={task.comments?.length > 0}>
                                   <summary className={`text-xs cursor-pointer flex items-center gap-2 transition-colors select-none ${task.comments?.length > 0 ? 'font-bold text-violet-600' : 'font-semibold text-zinc-400 hover:text-zinc-600'}`}>
                                     <MessageSquare size={14}/> {task.comments?.length || 0} Comments
@@ -519,7 +520,7 @@ export default function App() {
                                     <CommentThread comments={task.comments || []} taskId={task.id} userRole={userRole} db={db} appId={appId} tasks={tasks} showAlert={showAlert} />
                                     {userRole.role !== 'guest' && (
                                       <form onSubmit={(e) => { e.preventDefault(); addComment(task.id, e.target.elements.comment.value); e.target.reset(); }} className="flex gap-2 mt-3 relative">
-                                        <input name="comment" type="text" placeholder="Write a comment..." className="flex-1 text-sm p-3.5 pr-20 bg-white border border-zinc-200/80 rounded-2xl focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 transition-all shadow-sm font-medium" required/>
+                                        <input name="comment" type="text" placeholder="Write a comment..." className="flex-1 text-sm p-3.5 pr-20 bg-white border border-zinc-150/80 rounded-2xl focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 transition-all shadow-sm font-medium" required/>
                                         <button type="submit" className="absolute right-2 top-2 bottom-2 px-4 bg-zinc-900 text-white text-xs font-bold rounded-xl hover:bg-zinc-800 transition-all shadow-sm">Post</button>
                                       </form>
                                     )}
@@ -533,7 +534,7 @@ export default function App() {
                 )
               })}
               {subgroups.length === 0 && (
-                <div className="col-span-full text-center py-20 text-zinc-400 bg-white rounded-3xl border-2 border-dashed border-zinc-200">
+                <div className="col-span-full text-center py-20 text-zinc-400 bg-white rounded-[2rem] border-2 border-dashed border-zinc-150">
                   <div className="mx-auto w-16 h-16 bg-zinc-50 rounded-2xl flex items-center justify-center mb-4"><Clock size={24} className="text-zinc-300"/></div>
                   <p className="font-semibold text-zinc-600">No tasks or subgroups created yet.</p>
                   <p className="text-sm mt-1 text-zinc-400">Click "New Task" in the header to get started.</p>
@@ -548,12 +549,12 @@ export default function App() {
 
       {/* --- MODALS --- */}
       {alertConfig && (
-        <div className="fixed inset-0 bg-zinc-900/40 backdrop-blur-md z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200">
+        <div className="fixed inset-0 bg-zinc-900/20 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200">
           <div className="bg-white rounded-[2rem] shadow-2xl border border-zinc-100 w-full max-w-sm p-8 animate-in zoom-in-95 duration-200">
             <h2 className={`text-xl font-black tracking-tight mb-3 ${alertConfig.isError ? 'text-rose-600' : 'text-zinc-900'}`}>{alertConfig.title}</h2>
             <p className="text-zinc-600 mb-8 leading-relaxed font-medium text-sm">{alertConfig.message}</p>
             <div className="flex justify-end gap-3">
-              {alertConfig.onConfirm && <button onClick={() => setAlertConfig(null)} className="px-5 py-2.5 text-zinc-600 font-bold hover:bg-zinc-100 rounded-2xl transition-colors text-sm">Cancel</button>}
+              {alertConfig.onConfirm && <button onClick={() => setAlertConfig(null)} className="px-5 py-2.5 text-zinc-600 font-bold hover:bg-zinc-50 rounded-2xl transition-colors text-sm border border-transparent hover:border-zinc-150">Cancel</button>}
               <button 
                 onClick={() => { if (alertConfig.onConfirm) alertConfig.onConfirm(); setAlertConfig(null); }} 
                 className={`px-6 py-2.5 text-white font-bold rounded-2xl transition-all shadow-md text-sm ${alertConfig.isError ? 'bg-rose-600 hover:bg-rose-700 shadow-rose-600/30' : 'bg-zinc-900 hover:bg-zinc-800 shadow-zinc-900/30'}`}
@@ -566,7 +567,7 @@ export default function App() {
       )}
 
       {showPasswordModal && (
-        <div className="fixed inset-0 bg-zinc-900/40 backdrop-blur-md z-[60] flex items-center justify-center p-4 animate-in fade-in duration-200">
+        <div className="fixed inset-0 bg-zinc-900/20 backdrop-blur-sm z-[60] flex items-center justify-center p-4 animate-in fade-in duration-200">
           <div className="bg-white rounded-[2rem] shadow-2xl border border-zinc-100 w-full max-w-sm p-8 animate-in zoom-in-95 duration-200">
             <h2 className="text-xl font-black tracking-tight mb-6">Set Password for {passwordTargetUser}</h2>
             <form onSubmit={handleChangePassword} className="space-y-5">
@@ -574,7 +575,7 @@ export default function App() {
                 <input 
                   type={showNewPassword ? "text" : "password"} autoFocus required value={newPassword} 
                   onChange={e => setNewPassword(e.target.value)} 
-                  className="w-full p-4 border border-zinc-200 rounded-2xl focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 outline-none pr-12 transition-all font-semibold text-sm" 
+                  className="w-full p-4 border border-zinc-150 rounded-2xl focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 outline-none pr-12 transition-all font-semibold text-sm" 
                   placeholder="New password..." 
                 />
                 <button type="button" onClick={() => setShowNewPassword(!showNewPassword)} className="absolute right-4 top-4 text-zinc-400 hover:text-zinc-600 transition-colors">
@@ -582,7 +583,7 @@ export default function App() {
                 </button>
               </div>
               <div className="flex justify-end gap-3 mt-8 pt-2">
-                <button type="button" onClick={() => setShowPasswordModal(false)} className="px-5 py-2.5 text-zinc-600 font-bold hover:bg-zinc-100 rounded-2xl transition-colors text-sm">Cancel</button>
+                <button type="button" onClick={() => setShowPasswordModal(false)} className="px-5 py-2.5 text-zinc-600 font-bold hover:bg-zinc-50 rounded-2xl transition-colors text-sm border border-transparent hover:border-zinc-150">Cancel</button>
                 <button type="submit" className="px-6 py-2.5 bg-zinc-900 text-white font-bold rounded-2xl hover:bg-zinc-800 transition-all shadow-md shadow-zinc-900/30 text-sm">Save</button>
               </div>
             </form>
@@ -591,9 +592,9 @@ export default function App() {
       )}
 
       {showLogin && (
-        <div className="fixed inset-0 bg-zinc-900/40 backdrop-blur-md z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+        <div className="fixed inset-0 bg-zinc-900/20 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
           <div className="bg-white rounded-[2rem] shadow-2xl border border-zinc-100 w-full max-w-sm p-8 animate-in zoom-in-95 duration-200">
-            <div className="w-12 h-12 bg-zinc-100 rounded-2xl flex items-center justify-center mb-6">
+            <div className="w-12 h-12 bg-zinc-50 rounded-2xl flex items-center justify-center mb-6 border border-zinc-150/60 shadow-sm">
                <LogIn size={22} className="text-zinc-800"/>
             </div>
             <h2 className="text-xl font-black tracking-tight mb-2">Welcome back</h2>
@@ -602,17 +603,17 @@ export default function App() {
             <form onSubmit={handleLogin} className="space-y-4">
               <div>
                 <label className="block text-xs font-bold text-zinc-700 mb-1.5 ml-1 uppercase tracking-wider">Username</label>
-                <input type="text" autoFocus required value={loginUsername} onChange={e => setLoginUsername(e.target.value)} className="w-full p-4 bg-zinc-50 border border-zinc-200 rounded-2xl focus:bg-white focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 outline-none transition-all font-semibold text-sm" placeholder="e.g. Andres" />
+                <input type="text" autoFocus required value={loginUsername} onChange={e => setLoginUsername(e.target.value)} className="w-full p-4 bg-zinc-50 border border-zinc-150 rounded-2xl focus:bg-white focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 outline-none transition-all font-semibold text-sm" placeholder="e.g. Andres" />
               </div>
               <div className="relative">
                 <label className="block text-xs font-bold text-zinc-700 mb-1.5 ml-1 uppercase tracking-wider">Password</label>
-                <input type={showLoginPassword ? "text" : "password"} required value={loginPassword} onChange={e => setLoginPassword(e.target.value)} className="w-full p-4 bg-zinc-50 border border-zinc-200 rounded-2xl focus:bg-white focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 outline-none pr-12 transition-all font-semibold text-sm" placeholder="••••••••"/>
+                <input type={showLoginPassword ? "text" : "password"} required value={loginPassword} onChange={e => setLoginPassword(e.target.value)} className="w-full p-4 bg-zinc-50 border border-zinc-150 rounded-2xl focus:bg-white focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 outline-none pr-12 transition-all font-semibold text-sm" placeholder="••••••••"/>
                 <button type="button" onClick={() => setShowLoginPassword(!showLoginPassword)} className="absolute right-4 top-10 text-zinc-400 hover:text-zinc-600 transition-colors">
                   {showLoginPassword ? <EyeOff size={20}/> : <Eye size={20}/>}
                 </button>
               </div>
               <div className="flex justify-end gap-3 mt-8 pt-4 border-t border-zinc-100">
-                <button type="button" onClick={() => setShowLogin(false)} className="px-5 py-2.5 text-zinc-600 font-bold hover:bg-zinc-100 rounded-2xl transition-colors text-sm">Cancel</button>
+                <button type="button" onClick={() => setShowLogin(false)} className="px-5 py-2.5 text-zinc-600 font-bold hover:bg-zinc-50 rounded-2xl transition-colors text-sm border border-transparent hover:border-zinc-150">Cancel</button>
                 <button type="submit" className="px-6 py-2.5 bg-zinc-900 text-white font-bold rounded-2xl hover:bg-zinc-800 transition-all shadow-md shadow-zinc-900/30 text-sm">Login</button>
               </div>
             </form>
@@ -621,11 +622,11 @@ export default function App() {
       )}
 
       {showTeamModal && (
-        <div className="fixed inset-0 bg-zinc-900/40 backdrop-blur-md z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+        <div className="fixed inset-0 bg-zinc-900/20 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
           <div className="bg-white rounded-[2rem] shadow-2xl border border-zinc-100 w-full max-w-md p-8 animate-in zoom-in-95 duration-200">
             <h2 className="text-xl font-black tracking-tight mb-6">Manage Team</h2>
             <div className="space-y-3 mb-6 max-h-60 overflow-y-auto pr-2 custom-scrollbar">
-              <div className="flex justify-between items-center p-3.5 bg-[#FAFAFA] border border-zinc-200/80 rounded-2xl">
+              <div className="flex justify-between items-center p-3.5 bg-zinc-50 border border-zinc-150/80 rounded-2xl">
                 <div className="flex flex-col">
                    <span className="font-bold text-zinc-900">Andres</span>
                    <span className="text-[10px] font-black text-violet-600 uppercase tracking-widest mt-0.5">Manager</span>
@@ -635,12 +636,12 @@ export default function App() {
               {team.map(member => (
                 editingUserId === member.id ? (
                   <div key={member.id} className="flex items-center gap-2 p-3 bg-white border-2 border-violet-500 rounded-2xl shadow-sm">
-                    <input autoFocus value={editUserName} onChange={e => setEditUserName(e.target.value)} className="flex-1 p-2 text-sm font-bold border border-zinc-200 rounded-xl outline-none focus:border-violet-500" />
+                    <input autoFocus value={editUserName} onChange={e => setEditUserName(e.target.value)} className="flex-1 p-2 text-sm font-bold border border-zinc-150 rounded-xl outline-none focus:border-violet-500" />
                     <button onClick={() => editTeamMember(member, editUserName)} className="text-emerald-600 hover:text-emerald-700 bg-emerald-50 p-2.5 rounded-xl transition-colors"><Check size={16}/></button>
                     <button onClick={() => setEditingUserId(null)} className="text-zinc-500 hover:text-zinc-700 bg-zinc-100 p-2.5 rounded-xl transition-colors"><X size={16}/></button>
                   </div>
                 ) : (
-                  <div key={member.id} className="flex justify-between items-center p-3.5 bg-white border border-zinc-200/80 rounded-2xl hover:border-zinc-300 hover:shadow-sm transition-all group">
+                  <div key={member.id} className="flex justify-between items-center p-3.5 bg-white border border-zinc-150/80 rounded-2xl hover:border-zinc-300 hover:shadow-sm transition-all group">
                     <div className="flex flex-col">
                       <span className="font-bold text-zinc-900">{member.name}</span>
                       <span className="text-[10px] font-black text-zinc-400 uppercase tracking-widest mt-0.5">{member.role || 'staff'}</span>
@@ -658,8 +659,8 @@ export default function App() {
             <div className="pt-6 border-t border-zinc-100">
                <label className="block text-xs font-bold text-zinc-700 mb-2.5 ml-1 uppercase tracking-wider">Add New Member</label>
                <form onSubmit={e => { e.preventDefault(); const t = e.target; addTeamMember(t.name.value, t.role.value); t.reset(); }} className="flex gap-2.5">
-                 <input name="name" type="text" placeholder="Name..." className="flex-1 p-3.5 text-sm font-semibold bg-zinc-50 border border-zinc-200 rounded-2xl outline-none focus:bg-white focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 transition-all" required />
-                 <select name="role" className="p-3.5 text-sm font-semibold bg-zinc-50 border border-zinc-200 rounded-2xl outline-none focus:bg-white focus:border-violet-500 transition-all cursor-pointer">
+                 <input name="name" type="text" placeholder="Name..." className="flex-1 p-3.5 text-sm font-semibold bg-zinc-50 border border-zinc-150 rounded-2xl outline-none focus:bg-white focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 transition-all" required />
+                 <select name="role" className="p-3.5 text-sm font-semibold bg-zinc-50 border border-zinc-150 rounded-2xl outline-none focus:bg-white focus:border-violet-500 transition-all cursor-pointer">
                     <option value="staff">Staff</option>
                     <option value="viewer">Viewer</option>
                  </select>
@@ -667,7 +668,7 @@ export default function App() {
                </form>
             </div>
             <div className="mt-8 flex justify-end">
-              <button onClick={() => setShowTeamModal(false)} className="px-6 py-2.5 text-zinc-700 font-bold bg-zinc-100 rounded-2xl hover:bg-zinc-200 transition-colors text-sm">Done</button>
+              <button onClick={() => setShowTeamModal(false)} className="px-6 py-2.5 text-zinc-700 font-bold bg-zinc-50 rounded-2xl border border-transparent hover:border-zinc-150 transition-colors text-sm">Done</button>
             </div>
           </div>
         </div>
@@ -723,12 +724,12 @@ function CommentThread({ comments, taskId, userRole, db, appId, tasks, showAlert
   };
 
   return (
-    <div className={`space-y-3 ${parentIds.length > 0 ? 'ml-5 pl-4 border-l-2 border-zinc-200/60' : ''}`}>
+    <div className={`space-y-3 ${parentIds.length > 0 ? 'ml-5 pl-4 border-l-2 border-zinc-150/60' : ''}`}>
       {comments.map((c) => {
         const canEdit = userRole.role === 'manager' || userRole.username === c.author;
         return (
           <div key={c.id}>
-            <div className="bg-white p-4 rounded-2xl border border-zinc-200/60 shadow-sm text-sm group/comment relative hover:border-zinc-300 hover:shadow-md transition-all duration-300">
+            <div className="bg-white p-4 rounded-2xl border border-zinc-150/60 shadow-sm text-sm group/comment relative hover:border-zinc-300 hover:shadow-md transition-all duration-300">
               <div className="flex justify-between items-start mb-1.5">
                 <div className="font-bold text-zinc-900">{c.author} <span className="text-zinc-400 font-medium text-xs ml-2">{new Date(c.timestamp).toLocaleString([], {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'})}</span></div>
                 {canEdit && editingCommentId !== c.id && (
@@ -747,9 +748,9 @@ function CommentThread({ comments, taskId, userRole, db, appId, tasks, showAlert
               
               {editingCommentId === c.id ? (
                 <form onSubmit={e => { e.preventDefault(); saveEdit(c.id, e.target.elements.txt.value); }} className="mt-3 flex gap-2">
-                  <input name="txt" defaultValue={c.text} autoFocus className="flex-1 p-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm outline-none focus:border-violet-500 font-semibold"/>
+                  <input name="txt" defaultValue={c.text} autoFocus className="flex-1 p-2.5 bg-zinc-50 border border-zinc-150 rounded-xl text-sm outline-none focus:border-violet-500 font-semibold"/>
                   <button type="submit" className="px-3 bg-zinc-900 text-white rounded-xl font-bold hover:bg-zinc-800"><Check size={14}/></button>
-                  <button type="button" onClick={() => setEditingCommentId(null)} className="px-3 bg-zinc-100 text-zinc-600 rounded-xl font-bold hover:bg-zinc-200"><X size={14}/></button>
+                  <button type="button" onClick={() => setEditingCommentId(null)} className="px-3 bg-zinc-100 text-zinc-600 rounded-xl font-bold hover:bg-zinc-150"><X size={14}/></button>
                 </form>
               ) : (
                 <div className="text-zinc-600 mt-1.5 break-words leading-relaxed font-medium">{urlify(c.text)}</div>
@@ -761,7 +762,7 @@ function CommentThread({ comments, taskId, userRole, db, appId, tasks, showAlert
                   <input name="replyTxt" placeholder="Write a reply..." autoFocus className="flex-1 p-3 pr-20 border border-violet-200 rounded-2xl text-sm outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 bg-violet-50/40 shadow-sm transition-all font-medium"/>
                   <div className="absolute right-1.5 top-1.5 bottom-1.5 flex gap-1">
                      <button type="submit" className="px-3.5 bg-violet-600 text-white rounded-xl text-xs font-bold hover:bg-violet-700 shadow-sm">Reply</button>
-                     <button type="button" onClick={() => setReplyingToId(null)} className="px-2.5 bg-white text-zinc-500 border border-zinc-200 rounded-xl hover:bg-zinc-50"><X size={14}/></button>
+                     <button type="button" onClick={() => setReplyingToId(null)} className="px-2.5 bg-white text-zinc-500 border border-zinc-150 rounded-xl hover:bg-zinc-50"><X size={14}/></button>
                   </div>
               </form>
             )}
@@ -799,17 +800,17 @@ function TaskFormModal({ task, onClose, onSave, subgroups, assignees }) {
   };
 
   return (
-    <div className="fixed inset-0 bg-zinc-900/40 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
+    <div className="fixed inset-0 bg-zinc-900/20 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
       <div className="bg-white rounded-[2rem] shadow-2xl border border-zinc-100 w-full max-w-md p-8 max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-200 custom-scrollbar">
         <h2 className="text-xl font-black tracking-tight mb-6 text-zinc-900">{task ? 'Edit Task' : 'New Task'}</h2>
         <form onSubmit={handleSubmit} className="space-y-5">
           <div>
             <label className="block text-xs font-bold text-zinc-700 mb-1.5 ml-1 uppercase tracking-wider">Task Name</label>
-            <input type="text" required value={name} onChange={e => setName(e.target.value)} className="w-full p-4 bg-zinc-50 border border-zinc-200 rounded-2xl focus:bg-white focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 outline-none transition-all font-semibold text-sm" />
+            <input type="text" required value={name} onChange={e => setName(e.target.value)} className="w-full p-4 bg-zinc-50 border border-zinc-150 rounded-2xl focus:bg-white focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 outline-none transition-all font-semibold text-sm" />
           </div>
           <div>
             <label className="block text-xs font-bold text-zinc-700 mb-1.5 ml-1 uppercase tracking-wider">Subgroup</label>
-            <select value={subgroupMode === 'new' ? 'NEW' : subgroupSelect} onChange={e => { if(e.target.value === 'NEW') setSubgroupMode('new'); else { setSubgroupMode('existing'); setSubgroupSelect(e.target.value); } }} className="w-full p-4 bg-zinc-50 border border-zinc-200 rounded-2xl focus:bg-white focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 outline-none transition-all font-semibold mb-3 cursor-pointer text-sm">
+            <select value={subgroupMode === 'new' ? 'NEW' : subgroupSelect} onChange={e => { if(e.target.value === 'NEW') setSubgroupMode('new'); else { setSubgroupMode('existing'); setSubgroupSelect(e.target.value); } }} className="w-full p-4 bg-zinc-50 border border-zinc-150 rounded-2xl focus:bg-white focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 outline-none transition-all font-semibold mb-3 cursor-pointer text-sm">
               {subgroups.map(sg => <option key={sg} value={sg}>{sg}</option>)}
               <option value="NEW" className="font-bold text-violet-600">+ Create New Subgroup...</option>
             </select>
@@ -817,18 +818,18 @@ function TaskFormModal({ task, onClose, onSave, subgroups, assignees }) {
           </div>
           <div>
             <label className="block text-xs font-bold text-zinc-700 mb-1.5 ml-1 uppercase tracking-wider">Assignee</label>
-            <select value={assignee} onChange={e => setAssignee(e.target.value)} className="w-full p-4 bg-zinc-50 border border-zinc-200 rounded-2xl outline-none focus:bg-white transition-all font-semibold cursor-pointer text-sm">
+            <select value={assignee} onChange={e => setAssignee(e.target.value)} className="w-full p-4 bg-zinc-50 border border-zinc-150 rounded-2xl outline-none focus:bg-white transition-all font-semibold cursor-pointer text-sm">
               {assignees.map(a => <option key={a} value={a}>{a}</option>)}
             </select>
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-bold text-zinc-700 mb-1.5 ml-1 uppercase tracking-wider">Start Date</label>
-              <input type="date" required value={startDate} onChange={e => { setStartDate(e.target.value); if (endDate && e.target.value > endDate) setEndDate(e.target.value); }} className="w-full p-4 bg-zinc-50 border border-zinc-200 rounded-2xl outline-none focus:bg-white transition-all font-semibold text-sm" />
+              <input type="date" required value={startDate} onChange={e => { setStartDate(e.target.value); if (endDate && e.target.value > endDate) setEndDate(e.target.value); }} className="w-full p-4 bg-zinc-50 border border-zinc-150 rounded-2xl outline-none focus:bg-white transition-all font-semibold text-sm" />
             </div>
             <div>
               <label className="block text-xs font-bold text-zinc-700 mb-1.5 ml-1 uppercase tracking-wider">End Date</label>
-              <input type="date" required min={startDate} value={endDate} onChange={e => setEndDate(e.target.value)} className="w-full p-4 bg-zinc-50 border border-zinc-200 rounded-2xl outline-none focus:bg-white transition-all font-semibold text-sm" />
+              <input type="date" required min={startDate} value={endDate} onChange={e => setEndDate(e.target.value)} className="w-full p-4 bg-zinc-50 border border-zinc-150 rounded-2xl outline-none focus:bg-white transition-all font-semibold text-sm" />
             </div>
           </div>
           
@@ -839,14 +840,14 @@ function TaskFormModal({ task, onClose, onSave, subgroups, assignees }) {
                    <button key={c} type="button" onClick={() => setColor(c)} className={`w-8 h-8 rounded-full border-2 transition-all duration-200 ${color === c ? 'border-zinc-900 scale-110 shadow-md' : 'border-transparent hover:scale-110 hover:shadow-sm'}`} style={{backgroundColor: c}}></button>
                 ))}
              </div>
-             <div className="flex items-center gap-3 bg-zinc-50 p-3 rounded-2xl border border-zinc-200 w-max">
+             <div className="flex items-center gap-3 bg-zinc-50 p-3 rounded-2xl border border-zinc-150 w-max">
                 <span className="text-xs font-bold text-zinc-500 uppercase tracking-wider ml-1">Custom:</span>
                 <input type="color" value={color} onChange={e => setColor(e.target.value)} className="w-8 h-8 rounded-lg cursor-pointer border-0 p-0 bg-transparent" />
              </div>
           </div>
 
           <div className="flex justify-end gap-3 mt-8 pt-4 border-t border-zinc-100">
-            <button type="button" onClick={onClose} className="px-5 py-2.5 text-zinc-600 font-bold hover:bg-zinc-100 rounded-2xl transition-colors text-sm">Cancel</button>
+            <button type="button" onClick={onClose} className="px-5 py-2.5 text-zinc-600 font-bold hover:bg-zinc-50 border border-transparent hover:border-zinc-150 rounded-2xl transition-colors text-sm">Cancel</button>
             <button type="submit" className="px-6 py-2.5 bg-zinc-900 text-white font-bold rounded-2xl hover:bg-zinc-800 transition-all shadow-md shadow-zinc-900/30 text-sm">Save Task</button>
           </div>
         </form>
@@ -1000,7 +1001,7 @@ function ChatPanel({ db, appId, userRole, team, showAlert }) {
   return (
     <div className="fixed bottom-6 right-6 z-[60] flex flex-col items-end">
        {isOpen && (
-          <div className="bg-white/95 backdrop-blur-2xl border border-zinc-200/80 rounded-[2rem] shadow-[0_20px_60px_rgba(0,0,0,0.15)] flex flex-col overflow-hidden animate-in slide-in-from-bottom-6 fixed inset-0 sm:relative sm:inset-auto w-full h-full sm:w-[380px] sm:h-[600px] sm:mb-4 z-[70]">
+          <div className="bg-white/95 backdrop-blur-2xl border border-zinc-150/80 rounded-[2rem] shadow-[0_20px_60px_rgba(0,0,0,0.15)] flex flex-col overflow-hidden animate-in slide-in-from-bottom-6 fixed inset-0 sm:relative sm:inset-auto w-full h-full sm:w-[380px] sm:h-[600px] sm:mb-4 z-[70]">
             {!activeChannel ? (
                <div className="flex flex-col h-full">
                  <div className="bg-zinc-900 p-5 text-white flex justify-between items-center shrink-0 pt-[max(env(safe-area-inset-top),20px)] sm:pt-5 border-b border-zinc-800">
@@ -1011,13 +1012,13 @@ function ChatPanel({ db, appId, userRole, team, showAlert }) {
                     </div>
                  </div>
                  
-                 <div className="flex-1 overflow-y-auto bg-[#FAFAFA] p-3.5 space-y-2.5 custom-scrollbar">
+                 <div className="flex-1 overflow-y-auto bg-zinc-50 p-3.5 space-y-2.5 custom-scrollbar">
                     {showCreate && (
-                       <div className="bg-white p-4 rounded-2xl border border-zinc-200 mb-4 shadow-sm animate-in fade-in slide-in-from-top-2">
+                       <div className="bg-white p-4 rounded-2xl border border-zinc-150 mb-4 shadow-sm animate-in fade-in slide-in-from-top-2">
                           <h4 className="text-xs font-bold text-zinc-400 mb-3 uppercase tracking-wider">New Conversation</h4>
                           <div className="space-y-1.5 max-h-40 overflow-y-auto mb-4 custom-scrollbar">
                              {everyoneElse.map(u => (
-                                <label key={u} className="flex items-center gap-3 text-sm p-2.5 hover:bg-zinc-50 rounded-xl cursor-pointer transition-colors border border-transparent hover:border-zinc-200 font-semibold text-zinc-700">
+                                <label key={u} className="flex items-center gap-3 text-sm p-2.5 hover:bg-zinc-50 rounded-xl cursor-pointer transition-colors border border-transparent hover:border-zinc-150 font-semibold text-zinc-700">
                                    <input type="checkbox" checked={selectedUsers.includes(u)} className="rounded text-violet-600 focus:ring-violet-500/20 w-4 h-4" onChange={e => {
                                       if (e.target.checked) setSelectedUsers([...selectedUsers, u]);
                                       else setSelectedUsers(selectedUsers.filter(x => x !== u));
@@ -1027,7 +1028,7 @@ function ChatPanel({ db, appId, userRole, team, showAlert }) {
                              ))}
                           </div>
                           <div className="flex gap-2">
-                             <button onClick={() => setShowCreate(false)} className="flex-1 px-3 py-2.5 bg-zinc-100 text-zinc-600 font-bold rounded-xl text-xs hover:bg-zinc-200 transition-colors">Cancel</button>
+                             <button onClick={() => setShowCreate(false)} className="flex-1 px-3 py-2.5 bg-zinc-100 text-zinc-600 font-bold rounded-xl text-xs hover:bg-zinc-150 transition-colors">Cancel</button>
                              <button onClick={createChannel} disabled={selectedUsers.length===0} className="flex-1 px-3 py-2.5 bg-zinc-900 text-white font-bold rounded-xl text-xs disabled:opacity-50 hover:bg-zinc-800 transition-colors shadow-sm">Start Chat</button>
                           </div>
                        </div>
@@ -1040,7 +1041,7 @@ function ChatPanel({ db, appId, userRole, team, showAlert }) {
                        const unread = unreadCounts[ch.id] || 0;
                        
                        return (
-                          <button key={ch.id} onClick={() => handleOpenChannel(ch)} className="w-full flex justify-between items-center p-3.5 bg-white rounded-2xl border border-zinc-200/60 shadow-sm hover:shadow-md hover:border-violet-300 transition-all duration-200 text-left group">
+                          <button key={ch.id} onClick={() => handleOpenChannel(ch)} className="w-full flex justify-between items-center p-3.5 bg-white rounded-2xl border border-zinc-150/60 shadow-sm hover:shadow-md hover:border-violet-300 transition-all duration-200 text-left group">
                              <div className="flex items-center gap-3 truncate pr-2">
                                 <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 transition-colors ${isGeneral ? 'bg-violet-100 text-violet-700 group-hover:bg-violet-600 group-hover:text-white' : 'bg-zinc-100 text-zinc-700 group-hover:bg-zinc-900 group-hover:text-white'}`}>
                                    {isGeneral ? <Users size={18}/> : <User size={18}/>}
@@ -1065,10 +1066,10 @@ function ChatPanel({ db, appId, userRole, team, showAlert }) {
                  </div>
                </div>
             ) : (
-               <div className="flex flex-col h-full bg-[#FAFAFA]">
+               <div className="flex flex-col h-full bg-zinc-50">
                   <div className="bg-white p-4 flex justify-between items-center shrink-0 pt-[max(env(safe-area-inset-top),16px)] sm:pt-4 border-b border-zinc-100 shadow-sm z-10">
                      <div className="flex items-center gap-3 truncate">
-                        <button onClick={() => { setActiveChannel(null); markRead(activeChannel.id); }} className="p-2 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 rounded-xl transition-colors"><ArrowLeft size={16}/></button>
+                        <button onClick={() => { setActiveChannel(null); markRead(activeChannel.id); }} className="p-2 bg-zinc-100 hover:bg-zinc-150 text-zinc-700 rounded-xl transition-colors"><ArrowLeft size={16}/></button>
                         <span className="font-bold tracking-tight text-zinc-900 truncate text-sm">{activeChannel.id === 'general' ? 'Team Chat' : activeChannel.participants.filter(p => p !== userRole.username).join(', ')}</span>
                      </div>
                      <div className="flex items-center gap-1 shrink-0 ml-2">
@@ -1092,7 +1093,7 @@ function ChatPanel({ db, appId, userRole, team, showAlert }) {
                         return (
                            <div key={m.id} className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
                               {showAuthor && !isMe && <span className="text-[10px] font-bold text-zinc-400 mb-1 px-1 ml-1">{m.author}</span>}
-                              <div className={`px-4 py-3 rounded-2xl max-w-[85%] text-sm break-words shadow-sm font-medium ${isMe ? 'bg-zinc-900 text-white rounded-br-sm' : 'bg-white border border-zinc-200/80 text-zinc-800 rounded-bl-sm'}`}>
+                              <div className={`px-4 py-3 rounded-2xl max-w-[85%] text-sm break-words shadow-sm font-medium ${isMe ? 'bg-zinc-900 text-white rounded-br-sm' : 'bg-white border border-zinc-150/80 text-zinc-800 rounded-bl-sm'}`}>
                                  {urlify(m.text)}
                               </div>
                            </div>
@@ -1102,7 +1103,7 @@ function ChatPanel({ db, appId, userRole, team, showAlert }) {
                   </div>
                   
                   <form onSubmit={sendMessage} className="p-4 bg-white border-t border-zinc-100 flex gap-2.5 shrink-0 pb-[max(env(safe-area-inset-bottom),16px)] sm:pb-4 rounded-b-[2rem]">
-                     <input type="text" value={newMessage} onChange={e => setNewMessage(e.target.value)} placeholder="Type a message..." className="flex-1 px-4 py-3.5 bg-zinc-50 border border-zinc-200 rounded-2xl text-sm outline-none focus:bg-white focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 transition-all font-medium" />
+                     <input type="text" value={newMessage} onChange={e => setNewMessage(e.target.value)} placeholder="Type a message..." className="flex-1 px-4 py-3.5 bg-zinc-50 border border-zinc-150 rounded-2xl text-sm outline-none focus:bg-white focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 transition-all font-medium" />
                      <button type="submit" disabled={!newMessage.trim()} className="w-12 h-12 bg-violet-600 text-white rounded-2xl flex items-center justify-center disabled:opacity-50 disabled:bg-zinc-300 shrink-0 hover:bg-violet-700 hover:shadow-lg hover:shadow-violet-600/35 transition-all duration-200"><Send size={18} className="ml-0.5"/></button>
                   </form>
                </div>
@@ -1157,13 +1158,13 @@ function Timeline({ tasks, zoomLevel, onTaskClick }) {
 
   return (
     <div className="relative min-w-max min-h-full pb-8">
-      <div className="flex flex-col sticky top-0 bg-[#FAFAFA] z-30 border-b border-zinc-200/60 shadow-sm">
+      <div className="flex flex-col sticky top-0 bg-white z-20 border-b border-zinc-150/60 shadow-sm">
         
         {/* Months Row - Sticky Horizontally */}
-        <div className="flex border-b border-zinc-200/40 bg-zinc-50/80">
+        <div className="flex border-b border-zinc-150/60 bg-zinc-50">
           {monthGroups.map((mg, idx) => (
-            <div key={idx} style={{ width: mg.count * dayWidth }} className="flex-shrink-0 border-r border-zinc-200/40 relative">
-              <span className="sticky left-0 inline-block px-3 py-1.5 text-[10px] font-black text-violet-700 uppercase tracking-widest whitespace-nowrap z-40">
+            <div key={idx} style={{ width: mg.count * dayWidth }} className="flex-shrink-0 border-r border-zinc-150/60 relative">
+              <span className="sticky left-0 inline-block px-3 py-1.5 text-[10px] font-black text-violet-700 uppercase tracking-widest whitespace-nowrap z-30 drop-shadow-sm bg-zinc-50 rounded-r-md">
                 {mg.label}
               </span>
             </div>
@@ -1171,7 +1172,7 @@ function Timeline({ tasks, zoomLevel, onTaskClick }) {
         </div>
 
         {/* Days Row */}
-        <div className="flex pb-1.5 pt-1.5 bg-[#FAFAFA]">
+        <div className="flex pb-1.5 pt-1.5 bg-white">
           {Array.from({ length: totalDays }).map((_, i) => {
             const d = new Date(minDate);
             d.setDate(d.getDate() + i);
@@ -1180,9 +1181,9 @@ function Timeline({ tasks, zoomLevel, onTaskClick }) {
             const isWeekend = d.getDay() === 0 || d.getDay() === 6;
             
             return (
-              <div key={i} className={`flex-shrink-0 border-r border-zinc-200/40 flex flex-col items-center justify-end pb-1.5 pt-1 ${isToday ? 'bg-violet-100 rounded-t-xl border-violet-300' : (isWeekend ? 'bg-zinc-100/60' : '')}`} style={{ width: dayWidth }}>
-                <span className={`text-[8px] font-black ${isToday ? 'text-violet-600' : (isWeekend ? 'text-zinc-400' : 'text-zinc-400')}`}>{dayLetter}</span>
-                <span className={`text-[10px] font-bold ${isToday ? 'text-violet-700' : (isWeekend ? 'text-zinc-500' : 'text-zinc-800')}`}>{d.getDate()}</span>
+              <div key={i} className={`flex-shrink-0 border-r border-zinc-150/40 flex flex-col items-center justify-end pb-1.5 pt-1 ${isToday ? 'bg-violet-100 rounded-t-xl border-violet-300 z-10 relative' : (isWeekend ? 'bg-zinc-150/70' : '')}`} style={{ width: dayWidth }}>
+                <span className={`text-[8px] font-black ${isToday ? 'text-violet-600' : (isWeekend ? 'text-zinc-500' : 'text-zinc-400')}`}>{dayLetter}</span>
+                <span className={`text-[10px] font-bold ${isToday ? 'text-violet-700' : (isWeekend ? 'text-zinc-600' : 'text-zinc-800')}`}>{d.getDate()}</span>
               </div>
             );
           })}
@@ -1197,7 +1198,7 @@ function Timeline({ tasks, zoomLevel, onTaskClick }) {
              d.setDate(d.getDate() + i);
              const isWeekend = d.getDay() === 0 || d.getDay() === 6;
              return (
-                <div key={`bg-${i}`} className={`flex-shrink-0 h-full border-r border-zinc-200/20 ${isWeekend ? 'bg-zinc-50/50' : ''}`} style={{ width: dayWidth }}></div>
+                <div key={`bg-${i}`} className={`flex-shrink-0 h-full border-r border-zinc-150/30 ${isWeekend ? 'bg-zinc-150/50' : ''}`} style={{ width: dayWidth }}></div>
              )
           })}
         </div>
@@ -1268,14 +1269,14 @@ function Calendar({ tasks, onTaskClick }) {
 
   return (
     <div className="flex flex-col min-h-full pb-8">
-      <div className="flex justify-between items-center mb-6 flex-shrink-0 sticky top-0 bg-[#FAFAFA]/95 backdrop-blur-md z-20 py-2">
-        <button onClick={prevMonth} className="p-2.5 hover:bg-white rounded-2xl shadow-sm border border-zinc-200/80 transition-all text-zinc-700 font-bold">&lt;</button>
+      <div className="flex justify-between items-center mb-6 flex-shrink-0 sticky top-0 bg-white z-20 py-2">
+        <button onClick={prevMonth} className="p-2.5 hover:bg-zinc-50 rounded-2xl shadow-sm border border-zinc-150/80 transition-all text-zinc-700 font-bold">&lt;</button>
         <h3 className="font-extrabold tracking-tight text-xl text-zinc-900">{currentMonth.toLocaleString('default', { month: 'long', year: 'numeric' })}</h3>
-        <button onClick={nextMonth} className="p-2.5 hover:bg-white rounded-2xl shadow-sm border border-zinc-200/80 transition-all text-zinc-700 font-bold">&gt;</button>
+        <button onClick={nextMonth} className="p-2.5 hover:bg-zinc-50 rounded-2xl shadow-sm border border-zinc-150/80 transition-all text-zinc-700 font-bold">&gt;</button>
       </div>
       
-      <div className="bg-zinc-200/60 border border-zinc-200/80 rounded-3xl overflow-hidden flex flex-col flex-1 shadow-sm">
-        <div className="grid grid-cols-7 gap-px bg-zinc-200/60 shrink-0">
+      <div className="bg-zinc-150/60 border border-zinc-150/80 rounded-[1.5rem] overflow-hidden flex flex-col flex-1 shadow-sm">
+        <div className="grid grid-cols-7 gap-px bg-zinc-150/60 shrink-0">
            {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => <div key={d} className="bg-zinc-50 p-3 text-center text-[10px] font-black text-zinc-500 uppercase tracking-widest">{d}</div>)}
         </div>
         
@@ -1309,23 +1310,23 @@ function Calendar({ tasks, onTaskClick }) {
            });
 
            return (
-              <div key={wIdx} className="grid grid-cols-7 gap-px bg-zinc-200/60 flex-1 min-h-[120px] relative">
+              <div key={wIdx} className="grid grid-cols-7 gap-px bg-zinc-150/60 flex-1 min-h-[120px] relative">
                  {week.map((day, dIdx) => (
-                    <div key={dIdx} className={`p-2 ${day.isCurrentMonth ? 'bg-white' : 'bg-[#FAFAFA]'}`}>
+                    <div key={dIdx} className={`p-2 ${day.isCurrentMonth ? 'bg-white' : 'bg-zinc-50'}`}>
                        <span className={`text-xs font-bold ${day.isCurrentMonth ? 'text-zinc-700' : 'text-zinc-300'}`}>{day.dayNum}</span>
                     </div>
                  ))}
                  
                  <div className="absolute inset-0 pt-8 pointer-events-none">
                     {rowSlots.map((row, rIdx) => (
-                       <div key={rIdx} className="relative h-6 mb-1.5">
+                       <div key={rIdx} className="relative h-6 mb-1">
                           {row.map(task => {
                              const leftPct = (task.startIdx / 7) * 100;
                              const widthPct = ((task.endIdx - task.startIdx + 1) / 7) * 100;
                              return (
                                 <div 
                                   key={task.id} onClick={() => onTaskClick(task)}
-                                  className="absolute h-5 rounded-md text-[10px] font-bold text-white px-2 truncate cursor-pointer shadow-sm pointer-events-auto flex items-center hover:ring-2 hover:ring-zinc-900/20 transition-all hover:scale-[1.01] hover:z-10"
+                                  className="absolute h-5 rounded-md text-[10px] font-medium text-white px-2 truncate cursor-pointer shadow-sm pointer-events-auto flex items-center hover:ring-2 hover:ring-zinc-900/20 transition-all hover:scale-[1.01] hover:z-10"
                                   style={{ left: `calc(${leftPct}% + 4px)`, width: `calc(${widthPct}% - 8px)`, backgroundColor: task.color }}
                                   title={`${task.name} (${formatDate(task.startDate)} - ${formatDate(task.endDate)}) - Click to Edit`}
                                 >
