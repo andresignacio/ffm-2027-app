@@ -1,37 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { initializeApp } from 'firebase/app';
-import { getAuth, onAuthStateChanged, signInAnonymously, signInWithCustomToken } from 'firebase/auth';
+import { getAuth, onAuthStateChanged, signInAnonymously } from 'firebase/auth';
 import { getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc, updateDoc, getDoc, getDocs, query, orderBy, addDoc, serverTimestamp } from 'firebase/firestore';
-import { Calendar as CalendarIcon, Clock, Users, User, LogIn, LogOut, Plus, Download, Upload, FileText, MessageSquare, Trash2, Edit2, AlertCircle, Key, Eye, EyeOff, X, Check, ArrowLeft, Send, Bell, PlusCircle, Reply } from 'lucide-react';
+import { Calendar as CalendarIcon, Clock, Users, User, LogIn, LogOut, Plus, Download, Upload, FileText, MessageSquare, Trash2, Edit2, AlertCircle, Key, Eye, EyeOff, X, Check, ArrowLeft, Send, PlusCircle, Reply } from 'lucide-react';
 
-const injectTailwind = () => {
-  if (typeof window === 'undefined') return;
-  if (!document.getElementById('tailwind-cdn')) {
-    const script = document.createElement('script');
-    script.id = 'tailwind-cdn';
-    script.src = 'https://cdn.tailwindcss.com';
-    document.head.appendChild(script);
-  }
-  if (!document.getElementById('html2pdf-cdn')) {
-    const pdfScript = document.createElement('script');
-    pdfScript.id = 'html2pdf-cdn';
-    pdfScript.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
-    document.head.appendChild(pdfScript);
-  }
-  if (!document.getElementById('custom-scrollbar-style')) {
-    const style = document.createElement('style');
-    style.id = 'custom-scrollbar-style';
-    style.innerHTML = `
-      .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
-      .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-      .custom-scrollbar::-webkit-scrollbar-thumb { background: #e4e4e7; border-radius: 9999px; }
-      .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #d4d4d8; }
-    `;
-    document.head.appendChild(style);
-  }
-};
-
-// --- FIREBASE SETUP ---
 const firebaseConfig = {
   apiKey: "AIzaSyAKYltJBn7OkCqMjO2NY_c8edWUgPJlgZY",
   authDomain: "flowers-for-mary-2027-tasking.firebaseapp.com",
@@ -41,14 +13,14 @@ const firebaseConfig = {
   appId: "1:490311866328:web:d2038f71180a75286984ad",
   measurementId: "G-0M3FZM7CWJ"
 };
+
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 const appId = 'flowers-for-mary-app';
 
-// --- UTILITIES ---
 const getTaskColor = (id) => {
-  const colors = ['#ef4444', '#f97316', '#f59e0b', '#84cc16', '#22c55e', '#06b6d4', '#3b82f6', '#8b5cf6', '#d946ef', '#f43f5e', '#14b8a6', '#6366f1', '#a855f7', '#ec4899', '#f43f5e', '#fb923c'];
+  const colors = ['#ef4444', '#f97316', '#f59e0b', '#84cc16', '#22c55e', '#06b6d4', '#3b82f6', '#8b5cf6', '#d946ef', '#f43f5e', '#14b8a6', '#6366f1', '#a855f7', '#ec4899', '#fb923c'];
   let hash = 0;
   for (let i = 0; i < id.length; i++) hash = id.charCodeAt(i) + ((hash << 5) - hash);
   return colors[Math.abs(hash) % colors.length];
@@ -100,12 +72,11 @@ export default function App() {
   const [editUserName, setEditUserName] = useState('');
 
   useEffect(() => {
-    injectTailwind();
     const initAuth = async () => {
       try {
         await signInAnonymously(auth);
       } catch (e) { 
-        console.error("Auth error:", e);
+        console.warn("Anonymous auth skipped or failed, falling back to read-only mode if permissions allow.");
       }
     };
     initAuth();
@@ -119,8 +90,12 @@ export default function App() {
         const data = d.data();
         return { id: d.id, ...data, color: data.color || getTaskColor(d.id) };
       }));
+      // Instantly mark as synced when data arrives!
       setIsSynced(true);
-    }, (err) => console.error("Tasks sync error:", err));
+    }, (err) => {
+      console.error("Tasks sync error:", err);
+      showAlert("Connection Error", "Could not connect to the database. Make sure you are online.", true);
+    });
     
     const unsubTeam = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'team'), (snap) => {
       setTeam(snap.docs.map(d => ({ id: d.id, ...d.data() })));
@@ -133,7 +108,6 @@ export default function App() {
     setAlertConfig({ title, message, isError, onConfirm });
   };
 
-  // --- ACTIONS ---
   const handleLogin = async (e) => {
     e.preventDefault();
     const uname = loginUsername.trim();
@@ -170,7 +144,7 @@ export default function App() {
         setLoginError('Invalid username or password combination.');
       }
     } catch (err) {
-      setLoginError('Error verifying credentials.');
+      setLoginError('Error verifying credentials. Check internet connection.');
     }
   };
 
@@ -185,14 +159,17 @@ export default function App() {
        if (tm) role = tm.role || 'staff';
     }
 
-    await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'credentials', passwordTargetUser), {
-      password: newPassword,
-      role: role
-    });
-
-    setShowPasswordModal(false);
-    setNewPassword('');
-    showAlert('Success', `Password updated successfully for ${passwordTargetUser}.`);
+    try {
+      await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'credentials', passwordTargetUser), {
+        password: newPassword,
+        role: role
+      });
+      setShowPasswordModal(false);
+      setNewPassword('');
+      showAlert('Success', `Password updated successfully for ${passwordTargetUser}.`);
+    } catch (err) {
+      showAlert('Error', 'Failed to update password. You may not have permission.', true);
+    }
   };
 
   const handleLogout = () => setUserRole({ role: 'guest', username: '' });
@@ -202,13 +179,21 @@ export default function App() {
     const task = { ...taskData, id, color: taskData.color || getTaskColor(id) };
     if (!task.progress) task.progress = 0;
     if (!task.comments) task.comments = [];
-    await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'tasks', id), task);
-    setShowTaskModal(false);
+    try {
+      await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'tasks', id), task);
+      setShowTaskModal(false);
+    } catch (err) {
+      showAlert("Error", "Could not save task. Check your permissions.", true);
+    }
   };
 
   const deleteTask = async (id) => {
     showAlert("Delete Task", "Are you sure you want to permanently delete this task?", false, async () => {
-      await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'tasks', id));
+      try {
+        await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'tasks', id));
+      } catch (err) {
+        showAlert("Error", "Could not delete task.", true);
+      }
     });
   };
 
@@ -380,23 +365,23 @@ export default function App() {
   const staffAssignees = ["Andres", ...team.filter(t => t.role !== 'viewer').map(t => t.name)];
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] text-zinc-900 font-sans p-4 md:p-8 selection:bg-violet-100 selection:text-violet-900 pb-28">
+    <div className="min-h-screen bg-zinc-50 text-zinc-900 font-sans p-4 md:p-8 selection:bg-violet-100 selection:text-violet-900 pb-28">
       {/* HEADER */}
-      <header className="max-w-7xl mx-auto bg-white/80 backdrop-blur-2xl rounded-3xl shadow-[0_10px_40px_rgb(0,0,0,0.03)] border border-zinc-200/60 p-5 mb-8 flex flex-col md:flex-row justify-between items-center gap-5 sticky top-4 z-40 transition-all">
+      <header className="max-w-7xl mx-auto bg-white/70 backdrop-blur-xl rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-zinc-200/50 p-5 mb-8 flex flex-col md:flex-row justify-between items-center gap-5 sticky top-4 z-40 transition-all">
         <div>
-          <h1 className="text-2xl font-black tracking-tight text-zinc-900">Flowers for Mary <span className="text-violet-600 font-bold">2027</span></h1>
-          <p className="text-xs font-semibold text-zinc-400 flex items-center gap-2 mt-1">
-            <span className={`w-2 h-2 rounded-full shadow-md ${isSynced ? 'bg-emerald-500 shadow-emerald-500/50' : 'bg-amber-500 animate-pulse shadow-amber-500/50'}`}></span> {isSynced ? 'Live Synced' : 'Syncing...'}
+          <h1 className="text-3xl font-black tracking-tight text-zinc-900">Flowers for Mary <span className="text-violet-600 font-bold">2027</span></h1>
+          <p className="text-xs font-bold text-zinc-500 flex items-center gap-2 mt-1">
+            <span className={`w-2.5 h-2.5 rounded-full shadow-sm ${isSynced ? 'bg-emerald-500 shadow-emerald-500/50' : 'bg-amber-500 animate-pulse shadow-amber-500/50'}`}></span> {isSynced ? 'Live Synced' : 'Syncing...'}
           </p>
         </div>
         <div className="flex flex-wrap gap-2.5 items-center">
           {userRole.role === 'guest' ? (
-            <button onClick={() => setShowLogin(true)} className="flex items-center gap-2 px-5 py-2.5 bg-zinc-900 text-white rounded-2xl hover:bg-zinc-800 hover:shadow-xl hover:-translate-y-0.5 transition-all duration-200 font-semibold text-sm">
+            <button onClick={() => setShowLogin(true)} className="flex items-center gap-2 px-6 py-2.5 bg-zinc-900 text-white rounded-2xl hover:bg-zinc-800 hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300 font-bold text-sm">
               <LogIn size={16} /> Login
             </button>
           ) : (
             <>
-              <div className="flex items-center gap-3 bg-zinc-100/80 px-4 py-2 rounded-2xl border border-zinc-200/60">
+              <div className="flex items-center gap-3 bg-zinc-100/80 px-4 py-2 rounded-2xl border border-zinc-200/50">
                 <span className="text-sm font-bold text-zinc-800 flex items-center gap-2">
                   <div className="bg-violet-100 text-violet-700 p-1.5 rounded-xl"><User size={14}/></div>
                   {userRole.username} <span className="text-zinc-400 font-medium text-xs ml-0.5">({userRole.role})</span>
@@ -409,28 +394,28 @@ export default function App() {
               
               {userRole.role === 'manager' && (
                 <>
-                  <button onClick={() => setShowTeamModal(true)} className="flex items-center gap-2 px-4 py-2.5 text-zinc-700 bg-white border border-zinc-200/80 rounded-2xl hover:bg-zinc-50 hover:border-zinc-300 transition-all shadow-sm font-semibold text-sm">
+                  <button onClick={() => setShowTeamModal(true)} className="flex items-center gap-2 px-4 py-2.5 text-zinc-700 bg-white border border-zinc-200/80 rounded-2xl hover:bg-zinc-50 hover:border-zinc-300 transition-all shadow-sm font-bold text-sm">
                     <Users size={16} className="text-zinc-500" /> Users
                   </button>
                   <div className="flex bg-white border border-zinc-200/80 rounded-2xl shadow-sm p-1 gap-1">
-                    <button onClick={handleExport} className="flex items-center justify-center p-2.5 text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100 rounded-xl transition-colors" title="Export Backup JSON">
-                      <Download size={16} />
+                    <button onClick={handleExport} className="flex items-center justify-center p-2 text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 rounded-xl transition-colors" title="Export Backup JSON">
+                      <Download size={18} />
                     </button>
                     <div className="w-px bg-zinc-200 my-1"></div>
-                    <label className="flex items-center justify-center p-2.5 text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100 rounded-xl transition-colors cursor-pointer" title="Import Backup JSON">
-                      <Upload size={16} />
+                    <label className="flex items-center justify-center p-2 text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 rounded-xl transition-colors cursor-pointer" title="Import Backup JSON">
+                      <Upload size={18} />
                       <input type="file" onChange={handleImport} accept="application/json,.json" className="hidden" />
                     </label>
                   </div>
                 </>
               )}
               
-              <button onClick={generatePDF} className="flex items-center gap-2 px-4 py-2.5 text-zinc-700 bg-white border border-zinc-200/80 rounded-2xl hover:bg-zinc-50 hover:border-zinc-300 transition-all shadow-sm font-semibold text-sm">
+              <button onClick={generatePDF} className="flex items-center gap-2 px-4 py-2.5 text-zinc-700 bg-white border border-zinc-200/80 rounded-2xl hover:bg-zinc-50 hover:border-zinc-300 transition-all shadow-sm font-bold text-sm">
                 <FileText size={16} className="text-zinc-500" /> Report
               </button>
               
               {userRole.role !== 'viewer' && (
-                <button onClick={() => { setEditingTask(null); setShowTaskModal(true); }} className="flex items-center gap-2 px-5 py-2.5 bg-violet-600 text-white rounded-2xl hover:bg-violet-700 hover:shadow-[0_8px_25px_rgba(124,58,237,0.35)] hover:-translate-y-0.5 transition-all duration-200 font-semibold text-sm">
+                <button onClick={() => { setEditingTask(null); setShowTaskModal(true); }} className="flex items-center gap-2 px-6 py-2.5 bg-violet-600 text-white rounded-2xl hover:bg-violet-700 hover:shadow-[0_8px_25px_rgba(124,58,237,0.35)] hover:-translate-y-0.5 transition-all duration-300 font-bold text-sm">
                   <Plus size={16} /> New Task
                 </button>
               )}
@@ -445,13 +430,14 @@ export default function App() {
 
       <main id="report-content" className="max-w-7xl mx-auto space-y-8">
         {/* SCHEDULE VIEW */}
-        <section className="bg-white rounded-3xl shadow-[0_10px_30px_rgb(0,0,0,0.02)] border border-zinc-200/60 p-6 lg:p-8">
+        <section className="bg-white rounded-[2rem] shadow-[0_10px_40px_rgb(0,0,0,0.03)] border border-zinc-200/50 p-6 lg:p-8">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
             <h2 className="text-xl font-bold tracking-tight text-zinc-900 flex items-center gap-3">
               <div className="p-2.5 bg-violet-50 text-violet-600 rounded-2xl"><CalendarIcon size={20}/></div>
               Project Schedule
             </h2>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-4">
+              {/* Zoom Slider is no longer hidden on mobile, and only shows on Timeline view */}
               {view === 'timeline' && (
                 <div className="flex items-center gap-2.5 bg-zinc-50/80 px-4 py-2 rounded-2xl border border-zinc-200/60 shadow-sm animate-in fade-in">
                   <span className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Zoom</span>
@@ -464,13 +450,13 @@ export default function App() {
                   />
                 </div>
               )}
-              <div className="flex bg-zinc-100 rounded-2xl p-1.5 border border-zinc-200/60">
-                <button onClick={() => setView('timeline')} className={`px-5 py-2 text-xs font-bold rounded-xl transition-all duration-200 ${view === 'timeline' ? 'bg-white shadow-sm text-zinc-900' : 'text-zinc-500 hover:text-zinc-700'}`}>Timeline</button>
-                <button onClick={() => setView('calendar')} className={`px-5 py-2 text-xs font-bold rounded-xl transition-all duration-200 ${view === 'calendar' ? 'bg-white shadow-sm text-zinc-900' : 'text-zinc-500 hover:text-zinc-700'}`}>Calendar</button>
+              <div className="flex bg-zinc-100/80 rounded-2xl p-1.5 border border-zinc-200/50">
+                <button onClick={() => setView('timeline')} className={`px-5 py-2 text-xs font-bold rounded-xl transition-all duration-300 ${view === 'timeline' ? 'bg-white shadow-md text-zinc-900' : 'text-zinc-500 hover:text-zinc-700'}`}>Timeline</button>
+                <button onClick={() => setView('calendar')} className={`px-5 py-2 text-xs font-bold rounded-xl transition-all duration-300 ${view === 'calendar' ? 'bg-white shadow-md text-zinc-900' : 'text-zinc-500 hover:text-zinc-700'}`}>Calendar</button>
               </div>
             </div>
           </div>
-          <div className="border border-zinc-200/60 rounded-2xl overflow-auto bg-[#FAFAFA] p-6 shadow-inner" style={{ height: '460px' }}>
+          <div className="border border-zinc-200/60 rounded-3xl overflow-auto bg-[#FAFAFA] p-6 shadow-inner" style={{ height: '460px' }}>
             {view === 'timeline' ? (
               <Timeline tasks={tasks} zoomLevel={timelineZoom} onTaskClick={(t) => { if(canEditTask(t)) { setEditingTask(t); setShowTaskModal(true); } else { showAlert("Access Denied", "You don't have permission to edit this task."); } }} />
             ) : (
@@ -481,7 +467,7 @@ export default function App() {
 
         {/* TASK LIST */}
         <section>
-           <div className="flex items-center gap-3 mb-6 px-1">
+           <div className="flex items-center gap-3 mb-6 px-2">
              <div className="p-2.5 bg-violet-50 text-violet-600 rounded-2xl"><Clock size={20}/></div>
              <h2 className="text-xl font-bold tracking-tight text-zinc-900">Task Subgroups</h2>
            </div>
@@ -491,17 +477,17 @@ export default function App() {
                 const avgProgress = sgTasks.length ? Math.round(sgTasks.reduce((acc, t) => acc + (t.progress || 0), 0) / sgTasks.length) : 0;
                 
                 return (
-                  <div key={sg} className="bg-white rounded-3xl shadow-[0_10px_30px_rgb(0,0,0,0.02)] border border-zinc-200/60 p-6 lg:p-8 flex flex-col h-full hover:shadow-[0_15px_40px_rgb(0,0,0,0.04)] transition-all duration-300">
-                     <div className="flex justify-between items-center mb-5">
+                  <div key={sg} className="bg-white rounded-[2rem] shadow-[0_10px_40px_rgb(0,0,0,0.03)] border border-zinc-200/50 p-6 lg:p-8 flex flex-col h-full hover:shadow-[0_15px_50px_rgb(0,0,0,0.06)] transition-all duration-300">
+                     <div className="flex justify-between items-center mb-6">
                         <h3 className="text-lg font-extrabold text-zinc-900 tracking-tight">{sg}</h3>
-                        <span className="text-xs font-black px-3.5 py-1.5 bg-zinc-100 rounded-xl text-zinc-700">{avgProgress}% Done</span>
+                        <span className="text-[10px] font-black uppercase tracking-widest px-3.5 py-1.5 bg-zinc-100 rounded-xl text-zinc-600">{avgProgress}% Done</span>
                      </div>
-                     <div className="w-full bg-zinc-100 h-3 rounded-full mb-8 overflow-hidden shadow-inner">
+                     <div className="w-full bg-zinc-100 h-2.5 rounded-full mb-8 overflow-hidden">
                         <div className="bg-violet-600 h-full transition-all duration-700 ease-out rounded-full" style={{width: `${avgProgress}%`}}></div>
                      </div>
                      <div className="space-y-4 flex-1">
                         {sgTasks.map(task => (
-                           <div key={task.id} className="p-5 bg-[#FAFAFA] rounded-2xl border border-zinc-200/70 hover:bg-white hover:border-violet-300 hover:shadow-[0_8px_25px_rgb(0,0,0,0.04)] transition-all duration-300 group relative">
+                           <div key={task.id} className="p-5 bg-zinc-50/50 rounded-3xl border border-zinc-200/50 hover:bg-white hover:border-violet-300 hover:shadow-[0_8px_30px_rgb(0,0,0,0.05)] transition-all duration-300 group relative">
                               <div className="flex justify-between items-start mb-3">
                                 <div className="flex items-center gap-3">
                                   <div className="w-3.5 h-3.5 rounded-full shadow-sm" style={{ backgroundColor: task.color }}></div>
@@ -514,7 +500,7 @@ export default function App() {
                                    </div>
                                 )}
                               </div>
-                              <div className="flex justify-between items-center text-xs font-bold text-zinc-500 mb-4 px-1">
+                              <div className="flex justify-between items-center text-xs font-bold text-zinc-500 mb-5 px-1">
                                  <span className="flex items-center gap-1.5 bg-white px-3 py-1.5 rounded-xl border border-zinc-200/60 shadow-sm"><User size={12} className="text-violet-600"/> {task.assignee}</span>
                                  <span className="text-zinc-400 font-semibold">{formatDate(task.startDate)} - {formatDate(task.endDate)}</span>
                               </div>
@@ -529,7 +515,7 @@ export default function App() {
                                  <span className="text-xs font-black text-zinc-700 w-10 text-right">{task.progress || 0}%</span>
                               </div>
                               
-                              <div className="mt-4 pt-4 border-t border-zinc-200/60">
+                              <div className="mt-5 pt-4 border-t border-zinc-200/60">
                                 <details className="group/details" open={task.comments?.length > 0}>
                                   <summary className={`text-xs cursor-pointer flex items-center gap-2 transition-colors select-none ${task.comments?.length > 0 ? 'font-bold text-violet-600' : 'font-semibold text-zinc-400 hover:text-zinc-600'}`}>
                                     <MessageSquare size={14}/> {task.comments?.length || 0} Comments
@@ -567,8 +553,8 @@ export default function App() {
 
       {/* --- MODALS --- */}
       {alertConfig && (
-        <div className="fixed inset-0 bg-zinc-900/50 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-white rounded-3xl shadow-2xl border border-zinc-100 w-full max-w-sm p-8 animate-in zoom-in-95 duration-200">
+        <div className="fixed inset-0 bg-zinc-900/40 backdrop-blur-md z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-[2rem] shadow-2xl border border-zinc-100 w-full max-w-sm p-8 animate-in zoom-in-95 duration-200">
             <h2 className={`text-xl font-black tracking-tight mb-3 ${alertConfig.isError ? 'text-rose-600' : 'text-zinc-900'}`}>{alertConfig.title}</h2>
             <p className="text-zinc-600 mb-8 leading-relaxed font-medium text-sm">{alertConfig.message}</p>
             <div className="flex justify-end gap-3">
@@ -585,8 +571,8 @@ export default function App() {
       )}
 
       {showPasswordModal && (
-        <div className="fixed inset-0 bg-zinc-900/50 backdrop-blur-sm z-[60] flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-white rounded-3xl shadow-2xl border border-zinc-100 w-full max-w-sm p-8 animate-in zoom-in-95 duration-200">
+        <div className="fixed inset-0 bg-zinc-900/40 backdrop-blur-md z-[60] flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-[2rem] shadow-2xl border border-zinc-100 w-full max-w-sm p-8 animate-in zoom-in-95 duration-200">
             <h2 className="text-xl font-black tracking-tight mb-6">Set Password for {passwordTargetUser}</h2>
             <form onSubmit={handleChangePassword} className="space-y-5">
               <div className="relative">
@@ -610,8 +596,8 @@ export default function App() {
       )}
 
       {showLogin && (
-        <div className="fixed inset-0 bg-zinc-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-white rounded-3xl shadow-2xl border border-zinc-100 w-full max-w-sm p-8 animate-in zoom-in-95 duration-200">
+        <div className="fixed inset-0 bg-zinc-900/40 backdrop-blur-md z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-[2rem] shadow-2xl border border-zinc-100 w-full max-w-sm p-8 animate-in zoom-in-95 duration-200">
             <div className="w-12 h-12 bg-zinc-100 rounded-2xl flex items-center justify-center mb-6">
                <LogIn size={22} className="text-zinc-800"/>
             </div>
@@ -640,8 +626,8 @@ export default function App() {
       )}
 
       {showTeamModal && (
-        <div className="fixed inset-0 bg-zinc-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-white rounded-3xl shadow-2xl border border-zinc-100 w-full max-w-md p-8 animate-in zoom-in-95 duration-200">
+        <div className="fixed inset-0 bg-zinc-900/40 backdrop-blur-md z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-[2rem] shadow-2xl border border-zinc-100 w-full max-w-md p-8 animate-in zoom-in-95 duration-200">
             <h2 className="text-xl font-black tracking-tight mb-6">Manage Team</h2>
             <div className="space-y-3 mb-6 max-h-60 overflow-y-auto pr-2 custom-scrollbar">
               <div className="flex justify-between items-center p-3.5 bg-[#FAFAFA] border border-zinc-200/80 rounded-2xl">
@@ -697,8 +683,6 @@ export default function App() {
   );
 }
 
-// --- SUB-COMPONENTS ---
-
 function CommentThread({ comments, taskId, userRole, db, appId, tasks, showAlert, parentIds = [] }) {
   const [editingCommentId, setEditingCommentId] = useState(null);
   const [replyingToId, setReplyingToId] = useState(null);
@@ -749,7 +733,7 @@ function CommentThread({ comments, taskId, userRole, db, appId, tasks, showAlert
         const canEdit = userRole.role === 'manager' || userRole.username === c.author;
         return (
           <div key={c.id}>
-            <div className="bg-white p-4 rounded-2xl border border-zinc-200/60 shadow-sm text-sm group/comment relative hover:border-zinc-300 transition-all duration-300">
+            <div className="bg-white p-4 rounded-2xl border border-zinc-200/60 shadow-sm text-sm group/comment relative hover:border-zinc-300 hover:shadow-md transition-all duration-300">
               <div className="flex justify-between items-start mb-1.5">
                 <div className="font-bold text-zinc-900">{c.author} <span className="text-zinc-400 font-medium text-xs ml-2">{new Date(c.timestamp).toLocaleString([], {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'})}</span></div>
                 {canEdit && editingCommentId !== c.id && (
@@ -820,8 +804,8 @@ function TaskFormModal({ task, onClose, onSave, subgroups, assignees }) {
   };
 
   return (
-    <div className="fixed inset-0 bg-zinc-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
-      <div className="bg-white rounded-3xl shadow-2xl border border-zinc-100 w-full max-w-md p-8 max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-200">
+    <div className="fixed inset-0 bg-zinc-900/40 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
+      <div className="bg-white rounded-[2rem] shadow-2xl border border-zinc-100 w-full max-w-md p-8 max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-200 custom-scrollbar">
         <h2 className="text-2xl font-black tracking-tight mb-6 text-zinc-900">{task ? 'Edit Task' : 'New Task'}</h2>
         <form onSubmit={handleSubmit} className="space-y-5">
           <div>
@@ -875,8 +859,6 @@ function TaskFormModal({ task, onClose, onSave, subgroups, assignees }) {
     </div>
   );
 }
-
-// --- CHAT COMPONENTS ---
 
 function ChatPanel({ db, appId, userRole, team, showAlert }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -1023,7 +1005,7 @@ function ChatPanel({ db, appId, userRole, team, showAlert }) {
   return (
     <div className="fixed bottom-6 right-6 z-[60] flex flex-col items-end">
        {isOpen && (
-          <div className="bg-white/95 backdrop-blur-2xl border border-zinc-200/80 rounded-3xl shadow-[0_20px_60px_rgba(0,0,0,0.15)] flex flex-col overflow-hidden animate-in slide-in-from-bottom-6 fixed inset-0 sm:relative sm:inset-auto w-full h-full sm:w-[380px] sm:h-[600px] sm:mb-4 z-[70]">
+          <div className="bg-white/95 backdrop-blur-2xl border border-zinc-200/80 rounded-[2rem] shadow-[0_20px_60px_rgba(0,0,0,0.15)] flex flex-col overflow-hidden animate-in slide-in-from-bottom-6 fixed inset-0 sm:relative sm:inset-auto w-full h-full sm:w-[380px] sm:h-[600px] sm:mb-4 z-[70]">
             {!activeChannel ? (
                <div className="flex flex-col h-full">
                  <div className="bg-zinc-900 p-5 text-white flex justify-between items-center shrink-0 pt-[max(env(safe-area-inset-top),20px)] sm:pt-5 border-b border-zinc-800">
@@ -1076,7 +1058,7 @@ function ChatPanel({ db, appId, userRole, team, showAlert }) {
                     })}
                  </div>
                  
-                 <div className="p-4 border-t border-zinc-100 bg-white shrink-0 pb-[max(env(safe-area-inset-bottom),16px)] sm:pb-4 rounded-b-3xl">
+                 <div className="p-4 border-t border-zinc-100 bg-white shrink-0 pb-[max(env(safe-area-inset-bottom),16px)] sm:pb-4 rounded-b-[2rem]">
                     <div className="text-[10px] font-extrabold text-zinc-400 mb-2.5 uppercase tracking-widest">Online Now</div>
                     <div className="flex flex-wrap gap-2">
                        {Object.keys(onlineUsers).map(u => (
@@ -1124,7 +1106,7 @@ function ChatPanel({ db, appId, userRole, team, showAlert }) {
                      <div ref={messagesEndRef} className="h-2" />
                   </div>
                   
-                  <form onSubmit={sendMessage} className="p-4 bg-white border-t border-zinc-100 flex gap-2.5 shrink-0 pb-[max(env(safe-area-inset-bottom),16px)] sm:pb-4 rounded-b-3xl">
+                  <form onSubmit={sendMessage} className="p-4 bg-white border-t border-zinc-100 flex gap-2.5 shrink-0 pb-[max(env(safe-area-inset-bottom),16px)] sm:pb-4 rounded-b-[2rem]">
                      <input type="text" value={newMessage} onChange={e => setNewMessage(e.target.value)} placeholder="Type a message..." className="flex-1 px-4 py-3.5 bg-zinc-50 border border-zinc-200 rounded-2xl text-sm outline-none focus:bg-white focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 transition-all font-medium" />
                      <button type="submit" disabled={!newMessage.trim()} className="w-12 h-12 bg-violet-600 text-white rounded-2xl flex items-center justify-center disabled:opacity-50 disabled:bg-zinc-300 shrink-0 hover:bg-violet-700 hover:shadow-lg hover:shadow-violet-600/35 transition-all duration-200"><Send size={18} className="ml-0.5"/></button>
                   </form>
@@ -1160,21 +1142,52 @@ function Timeline({ tasks, zoomLevel, onTaskClick }) {
   const totalDays = Math.ceil((maxDate - minDate) / (1000 * 60 * 60 * 24));
   const dayWidth = zoomLevel || 44; 
 
+  const monthGroups = [];
+  let currentMonthStr = "";
+  let currentMonthDays = 0;
+
+  for (let i = 0; i < totalDays; i++) {
+    const d = new Date(minDate);
+    d.setDate(d.getDate() + i);
+    const mStr = d.toLocaleString('default', { month: 'long', year: 'numeric' });
+    if (mStr !== currentMonthStr) {
+      if (currentMonthStr !== "") monthGroups.push({ label: currentMonthStr, count: currentMonthDays });
+      currentMonthStr = mStr;
+      currentMonthDays = 1;
+    } else {
+      currentMonthDays++;
+    }
+  }
+  if (currentMonthStr !== "") monthGroups.push({ label: currentMonthStr, count: currentMonthDays });
+
   return (
     <div className="relative min-w-max min-h-full pb-8">
-      <div className="flex sticky top-0 bg-[#FAFAFA]/95 backdrop-blur-md z-10 border-b border-zinc-200/60 pb-1.5 pt-1">
-        {Array.from({ length: totalDays }).map((_, i) => {
-          const d = new Date(minDate);
-          d.setDate(d.getDate() + i);
-          const isFirstOfMonth = d.getDate() === 1;
-          const isToday = d.toDateString() === new Date().toDateString();
-          return (
-            <div key={i} className={`flex-shrink-0 border-r border-zinc-200/40 flex flex-col items-center justify-end pb-1.5 ${isToday ? 'bg-violet-50/80 rounded-t-xl border-violet-200' : ''}`} style={{ width: dayWidth }}>
-              {isFirstOfMonth && <span className="absolute top-0 text-[10px] font-black text-zinc-800 whitespace-nowrap ml-1 uppercase tracking-widest">{d.toLocaleString('default', { month: 'short' })}</span>}
-              <span className={`text-[10px] font-bold mt-6 ${isToday ? 'text-violet-700' : 'text-zinc-400'}`}>{d.getDate()}</span>
+      <div className="flex flex-col sticky top-0 bg-[#FAFAFA]/95 backdrop-blur-md z-20 border-b border-zinc-200/60">
+        
+        {/* Months Row - Sticky Horizontally */}
+        <div className="flex border-b border-zinc-200/40 bg-zinc-50/50">
+          {monthGroups.map((mg, idx) => (
+            <div key={idx} style={{ width: mg.count * dayWidth }} className="flex-shrink-0 border-r border-zinc-200/40 relative">
+              <span className="sticky left-0 inline-block px-3 py-1.5 text-[10px] font-black text-violet-700 uppercase tracking-widest whitespace-nowrap z-30">
+                {mg.label}
+              </span>
             </div>
-          );
-        })}
+          ))}
+        </div>
+
+        {/* Days Row */}
+        <div className="flex pb-1.5 pt-1.5">
+          {Array.from({ length: totalDays }).map((_, i) => {
+            const d = new Date(minDate);
+            d.setDate(d.getDate() + i);
+            const isToday = d.toDateString() === new Date().toDateString();
+            return (
+              <div key={i} className={`flex-shrink-0 border-r border-zinc-200/40 flex flex-col items-center justify-end pb-1.5 ${isToday ? 'bg-violet-50/80 rounded-t-xl border-violet-200' : ''}`} style={{ width: dayWidth }}>
+                <span className={`text-[10px] font-bold ${isToday ? 'text-violet-700' : 'text-zinc-400'}`}>{d.getDate()}</span>
+              </div>
+            );
+          })}
+        </div>
       </div>
       
       <div className="pt-6 space-y-3.5 relative">
@@ -1188,7 +1201,7 @@ function Timeline({ tasks, zoomLevel, onTaskClick }) {
              <div key={task.id} className="relative h-9 group" style={{ width: totalDays * dayWidth }}>
                 <div 
                   onClick={() => onTaskClick(task)}
-                  className="absolute h-7 top-1 rounded-xl shadow-sm border border-black/5 overflow-hidden transition-all hover:scale-[1.01] hover:shadow-md hover:ring-2 hover:ring-violet-400/50 z-10 cursor-pointer flex items-center"
+                  className="absolute h-7 top-1 rounded-xl shadow-sm border border-black/5 overflow-hidden transition-all hover:scale-[1.02] hover:shadow-md hover:ring-2 hover:ring-violet-400/50 z-10 cursor-pointer flex items-center"
                   style={{ 
                     left: leftDays * dayWidth, width: Math.max(durationDays * dayWidth, 12),
                     backgroundColor: `${task.color}15`, borderLeft: `4px solid ${task.color}`
@@ -1250,7 +1263,7 @@ function Calendar({ tasks, onTaskClick }) {
         <button onClick={nextMonth} className="p-2.5 hover:bg-white rounded-2xl shadow-sm border border-zinc-200/80 transition-all text-zinc-700 font-bold">&gt;</button>
       </div>
       
-      <div className="bg-zinc-200/60 border border-zinc-200/80 rounded-2xl overflow-hidden flex flex-col flex-1 shadow-sm">
+      <div className="bg-zinc-200/60 border border-zinc-200/80 rounded-3xl overflow-hidden flex flex-col flex-1 shadow-sm">
         <div className="grid grid-cols-7 gap-px bg-zinc-200/60 shrink-0">
            {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => <div key={d} className="bg-zinc-50 p-3 text-center text-[10px] font-black text-zinc-500 uppercase tracking-widest">{d}</div>)}
         </div>
@@ -1301,7 +1314,7 @@ function Calendar({ tasks, onTaskClick }) {
                              return (
                                 <div 
                                   key={task.id} onClick={() => onTaskClick(task)}
-                                  className="absolute h-5 rounded-lg text-[10px] font-bold text-white px-2.5 truncate cursor-pointer shadow-sm pointer-events-auto flex items-center hover:ring-2 hover:ring-zinc-900/20 transition-all hover:scale-[1.01] hover:z-10"
+                                  className="absolute h-5 rounded-md text-[10px] font-bold text-white px-2 truncate cursor-pointer shadow-sm pointer-events-auto flex items-center hover:ring-2 hover:ring-zinc-900/20 transition-all hover:scale-[1.01] hover:z-10"
                                   style={{ left: `calc(${leftPct}% + 4px)`, width: `calc(${widthPct}% - 8px)`, backgroundColor: task.color }}
                                   title={`${task.name} (${formatDate(task.startDate)} - ${formatDate(task.endDate)}) - Click to Edit`}
                                 >
