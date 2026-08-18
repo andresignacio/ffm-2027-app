@@ -94,12 +94,12 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    // Removed the auth dependency so it pulls your imported data down immediately!
     const unsubTasks = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'tasks'), (snap) => {
       setTasks(snap.docs.map(d => {
         const data = d.data();
         return { id: d.id, ...data, color: data.color || getTaskColor(d.id) };
       }));
+      // Instantly set synced to true the moment data arrives!
       setIsSynced(true);
     }, (err) => console.error("Tasks sync error:", err));
     
@@ -108,22 +108,6 @@ export default function App() {
     }, (err) => console.error("Team sync error:", err));
     
     return () => { unsubTasks(); unsubTeam(); };
-  }, []);
-
-  useEffect(() => {
-    // 100% Bulletproof Styling Engine Injection
-    if (!document.getElementById('tailwind-script')) {
-      const twScript = document.createElement('script');
-      twScript.id = 'tailwind-script';
-      twScript.src = "https://cdn.tailwindcss.com";
-      document.head.appendChild(twScript);
-    }
-
-    if (!window.html2pdf) {
-      const script = document.createElement('script');
-      script.src = "https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js";
-      document.head.appendChild(script);
-    }
   }, []);
 
   const showAlert = (title, message, isError = false, onConfirm = null) => {
@@ -591,7 +575,7 @@ export default function App() {
             <form onSubmit={handleLogin} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Username</label>
-                <input type="text" autoFocus required value={loginUsername} onChange={e => setLoginUsername(e.target.value)} className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="e.g. Andres or Don" />
+                <input type="text" autoFocus required value={loginUsername} onChange={e => setLoginUsername(e.target.value)} className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="e.g. Andres or Carms" />
               </div>
               <div className="relative">
                 <label className="block text-sm font-medium text-slate-700 mb-1">Password</label>
