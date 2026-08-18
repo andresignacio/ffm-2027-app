@@ -428,6 +428,7 @@ export default function App() {
         </div>
       </header>
 
+      {}
       <main id="report-content" className="max-w-7xl mx-auto space-y-8">
         {/* SCHEDULE VIEW */}
         <section className="bg-white rounded-[2rem] shadow-[0_10px_40px_rgb(0,0,0,0.03)] border border-zinc-200/50 p-6 lg:p-8">
@@ -436,8 +437,7 @@ export default function App() {
               <div className="p-2.5 bg-violet-50 text-violet-600 rounded-2xl"><CalendarIcon size={20}/></div>
               Project Schedule
             </h2>
-            <div className="flex items-center gap-4">
-              {/* Zoom Slider is no longer hidden on mobile, and only shows on Timeline view */}
+            <div className="flex flex-wrap items-center gap-4">
               {view === 'timeline' && (
                 <div className="flex items-center gap-2.5 bg-zinc-50/80 px-4 py-2 rounded-2xl border border-zinc-200/60 shadow-sm animate-in fade-in">
                   <span className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Zoom</span>
@@ -456,7 +456,7 @@ export default function App() {
               </div>
             </div>
           </div>
-          <div className="border border-zinc-200/60 rounded-3xl overflow-auto bg-[#FAFAFA] p-6 shadow-inner" style={{ height: '460px' }}>
+          <div className="border border-zinc-200/60 rounded-3xl overflow-auto bg-[#FAFAFA] p-6 shadow-inner relative" style={{ height: '460px' }}>
             {view === 'timeline' ? (
               <Timeline tasks={tasks} zoomLevel={timelineZoom} onTaskClick={(t) => { if(canEditTask(t)) { setEditingTask(t); setShowTaskModal(true); } else { showAlert("Access Denied", "You don't have permission to edit this task."); } }} />
             ) : (
@@ -465,7 +465,7 @@ export default function App() {
           </div>
         </section>
 
-        {/* TASK LIST */}
+        {}
         <section>
            <div className="flex items-center gap-3 mb-6 px-2">
              <div className="p-2.5 bg-violet-50 text-violet-600 rounded-2xl"><Clock size={20}/></div>
@@ -551,6 +551,7 @@ export default function App() {
       {/* --- CHAT WIDGET --- */}
       {userRole.role !== 'guest' && <ChatPanel db={db} appId={appId} userRole={userRole} team={team} showAlert={showAlert} />}
 
+      {}
       {/* --- MODALS --- */}
       {alertConfig && (
         <div className="fixed inset-0 bg-zinc-900/40 backdrop-blur-md z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200">
@@ -1162,13 +1163,14 @@ function Timeline({ tasks, zoomLevel, onTaskClick }) {
 
   return (
     <div className="relative min-w-max min-h-full pb-8">
-      <div className="flex flex-col sticky top-0 bg-[#FAFAFA]/95 backdrop-blur-md z-20 border-b border-zinc-200/60">
+      {/* FIX: Removed backdrop-blur-md which breaks horizontal sticky positioning. Using solid background instead. */}
+      <div className="flex flex-col sticky top-0 bg-[#FAFAFA] z-30 border-b border-zinc-200/60 shadow-sm">
         
         {/* Months Row - Sticky Horizontally */}
-        <div className="flex border-b border-zinc-200/40 bg-zinc-50/50">
+        <div className="flex border-b border-zinc-200/40 bg-zinc-50/80">
           {monthGroups.map((mg, idx) => (
             <div key={idx} style={{ width: mg.count * dayWidth }} className="flex-shrink-0 border-r border-zinc-200/40 relative">
-              <span className="sticky left-0 inline-block px-3 py-1.5 text-[10px] font-black text-violet-700 uppercase tracking-widest whitespace-nowrap z-30">
+              <span className="sticky left-0 inline-block px-3 py-1.5 text-[10px] font-black text-violet-700 uppercase tracking-widest whitespace-nowrap z-40">
                 {mg.label}
               </span>
             </div>
@@ -1176,7 +1178,7 @@ function Timeline({ tasks, zoomLevel, onTaskClick }) {
         </div>
 
         {/* Days Row */}
-        <div className="flex pb-1.5 pt-1.5">
+        <div className="flex pb-1.5 pt-1.5 bg-[#FAFAFA]">
           {Array.from({ length: totalDays }).map((_, i) => {
             const d = new Date(minDate);
             d.setDate(d.getDate() + i);
