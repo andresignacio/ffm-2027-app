@@ -943,6 +943,7 @@ function ChatPanel({ db, appId, userRole, team, showAlert }) {
   const [newMessage, setNewMessage] = useState('');
   const [showCreate, setShowCreate] = useState(false);
   const [selectedUsers, setSelectedUsers] = useState([]);
+  const [userSearch, setUserSearch] = useState('');
   const [unreadCounts, setUnreadCounts] = useState({});
   const [onlineUsers, setOnlineUsers] = useState({});
   const messagesEndRef = useRef(null);
@@ -1077,6 +1078,8 @@ function ChatPanel({ db, appId, userRole, team, showAlert }) {
   const everyoneElse = team.map(t => t.name).filter(n => n !== userRole.username);
   if (userRole.username !== 'Andres') everyoneElse.unshift('Andres');
 
+  const filteredUsers = everyoneElse.filter(u => u.toLowerCase().includes(userSearch.toLowerCase()));
+
   return (
     <div className="fixed bottom-6 right-6 z-[60] flex flex-col items-end">
        {isOpen && (
@@ -1086,8 +1089,8 @@ function ChatPanel({ db, appId, userRole, team, showAlert }) {
                  <div className="bg-zinc-900 p-5 text-white flex justify-between items-center shrink-0 pt-[max(env(safe-area-inset-top),20px)] sm:pt-5 border-b border-zinc-800">
                     <h3 className="font-bold tracking-tight text-base flex items-center gap-2.5"><MessageSquare size={18}/> Messages</h3>
                     <div className="flex gap-1.5">
-                       <button onClick={() => setShowCreate(!showCreate)} className="p-2 hover:bg-zinc-800 rounded-xl transition-colors"><PlusCircle size={18}/></button>
-                       <button onClick={() => setIsOpen(false)} className="p-2 hover:bg-zinc-800 rounded-xl transition-colors"><X size={18}/></button>
+                       <button onClick={() => setShowCreate(!showCreate)} className="flex items-center gap-1.5 px-3 py-1.5 bg-white/10 hover:bg-white/20 rounded-xl transition-colors text-xs font-bold"><Plus size={14}/> New</button>
+                       <button onClick={() => setIsOpen(false)} className="p-1.5 hover:bg-zinc-800 rounded-xl transition-colors"><X size={18}/></button>
                     </div>
                  </div>
                  
@@ -1095,20 +1098,44 @@ function ChatPanel({ db, appId, userRole, team, showAlert }) {
                     {showCreate && (
                        <div className="bg-white p-4 rounded-2xl border border-zinc-200 mb-4 shadow-sm animate-in fade-in slide-in-from-top-2">
                           <h4 className="text-xs font-bold text-zinc-400 mb-3 uppercase tracking-wider">New Conversation</h4>
+                          
+                          {selectedUsers.length > 0 && (
+                             <div className="flex flex-wrap gap-1.5 mb-3">
+                                {selectedUsers.map(su => (
+                                   <span key={su} className="flex items-center gap-1 bg-violet-100 text-violet-700 px-2 py-1 rounded-lg text-xs font-bold">
+                                      {su}
+                                      <button onClick={() => setSelectedUsers(selectedUsers.filter(x => x !== su))} className="hover:text-violet-900"><X size={12}/></button>
+                                   </span>
+                                ))}
+                             </div>
+                          )}
+
+                          <input 
+                             type="text" 
+                             placeholder="Search team members..." 
+                             value={userSearch} 
+                             onChange={e => setUserSearch(e.target.value)} 
+                             className="w-full p-2.5 mb-3 bg-zinc-50 border border-zinc-200 rounded-xl text-sm outline-none focus:border-violet-500 transition-all font-medium"
+                          />
+
                           <div className="space-y-1.5 max-h-40 overflow-y-auto mb-4 custom-scrollbar">
-                             {everyoneElse.map(u => (
-                                <label key={u} className="flex items-center gap-3 text-sm p-2.5 hover:bg-zinc-50 rounded-xl cursor-pointer transition-colors border border-transparent hover:border-zinc-200 font-semibold text-zinc-700">
-                                   <input type="checkbox" checked={selectedUsers.includes(u)} className="rounded text-violet-600 focus:ring-violet-500/20 w-4 h-4" onChange={e => {
-                                      if (e.target.checked) setSelectedUsers([...selectedUsers, u]);
-                                      else setSelectedUsers(selectedUsers.filter(x => x !== u));
-                                   }}/>
-                                   {u}
-                                </label>
-                             ))}
+                             {filteredUsers.length === 0 ? (
+                                <div className="text-xs text-zinc-400 text-center py-4">No users found.</div>
+                             ) : (
+                                filteredUsers.map(u => (
+                                   <label key={u} className="flex items-center gap-3 text-sm p-2.5 hover:bg-zinc-50 rounded-xl cursor-pointer transition-colors border border-transparent hover:border-zinc-200 font-semibold text-zinc-700">
+                                      <input type="checkbox" checked={selectedUsers.includes(u)} className="rounded text-violet-600 focus:ring-violet-500/20 w-4 h-4" onChange={e => {
+                                         if (e.target.checked) setSelectedUsers([...selectedUsers, u]);
+                                         else setSelectedUsers(selectedUsers.filter(x => x !== u));
+                                      }}/>
+                                      {u}
+                                   </label>
+                                ))
+                             )}
                           </div>
                           <div className="flex gap-2">
-                             <button onClick={() => setShowCreate(false)} className="flex-1 px-3 py-2.5 bg-zinc-100 text-zinc-600 font-bold rounded-xl text-xs hover:bg-zinc-200 transition-colors">Cancel</button>
-                             <button onClick={createChannel} disabled={selectedUsers.length===0} className="flex-1 px-3 py-2.5 bg-zinc-900 text-white font-bold rounded-xl text-xs disabled:opacity-50 hover:bg-zinc-800 transition-colors shadow-sm">Start Chat</button>
+                             <button onClick={() => { setShowCreate(false); setUserSearch(''); }} className="flex-1 px-3 py-2.5 bg-zinc-100 text-zinc-600 font-bold rounded-xl text-xs hover:bg-zinc-200 transition-colors">Cancel</button>
+                             <button onClick={() => { createChannel(); setUserSearch(''); }} disabled={selectedUsers.length===0} className="flex-1 px-3 py-2.5 bg-zinc-900 text-white font-bold rounded-xl text-xs disabled:opacity-50 hover:bg-zinc-800 transition-colors shadow-sm">Start Chat</button>
                           </div>
                        </div>
                     )}
