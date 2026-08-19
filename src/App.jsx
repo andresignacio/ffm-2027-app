@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { initializeApp } from 'firebase/app';
-import { getAuth, onAuthStateChanged, signInAnonymously } from 'firebase/auth';
-import { getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc, updateDoc, getDoc, getDocs, query, orderBy, addDoc, serverTimestamp } from 'firebase/firestore';
-import { Calendar as CalendarIcon, Clock, Users, User, LogIn, LogOut, Plus, Download, Upload, FileText, MessageSquare, Trash2, Edit2, AlertCircle, Key, Eye, EyeOff, X, Check, ArrowLeft, Send, PlusCircle, Reply, TrendingUp } from 'lucide-react';
+import { getAuth, onAuthStateChanged, signInAnonymously, signInWithCustomToken } from 'firebase/auth';
+import { getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc, updateDoc, getDoc, query, orderBy, addDoc, serverTimestamp } from 'firebase/firestore';
+import { Calendar as CalendarIcon, Clock, Users, User, LogIn, LogOut, Plus, Download, Upload, FileText, MessageSquare, Trash2, Edit2, AlertCircle, Key, Eye, EyeOff, X, Check, ArrowLeft, Send, Reply, TrendingUp, Smile } from 'lucide-react';
 
 const firebaseConfig = {
   apiKey: "AIzaSyAKYltJBn7OkCqMjO2NY_c8edWUgPJlgZY",
@@ -19,9 +19,12 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 const appId = 'flowers-for-mary-app';
 
+const generateId = () => Date.now().toString(36) + Math.random().toString(36).substring(2, 8);
+
 const getTaskColor = (id) => {
   const colors = ['#ef4444', '#f97316', '#f59e0b', '#84cc16', '#22c55e', '#06b6d4', '#3b82f6', '#8b5cf6', '#d946ef', '#f43f5e', '#14b8a6', '#6366f1', '#a855f7', '#ec4899', '#fb923c'];
   let hash = 0;
+  if (!id) return colors[0];
   for (let i = 0; i < id.length; i++) hash = id.charCodeAt(i) + ((hash << 5) - hash);
   return colors[Math.abs(hash) % colors.length];
 };
@@ -33,10 +36,31 @@ const formatDate = (dateStr) => {
 };
 
 const urlify = (text) => {
+  if (typeof text !== 'string') return '';
   const urlRegex = /(https?:\/\/[^\s]+)/g;
   return text.split(urlRegex).map((part, i) => 
     part.match(urlRegex) ? <a key={i} href={part} target="_blank" rel="noopener noreferrer" className="text-violet-600 hover:text-violet-700 font-semibold hover:underline transition-colors">{part}</a> : part
   );
+};
+
+const renderReactions = (reactions, onToggle, isMe) => {
+  if (!reactions) return null;
+  const counts = {};
+  Object.entries(reactions).forEach(([user, emoji]) => {
+     if (!counts[emoji]) counts[emoji] = { count: 0, users: [] };
+     counts[emoji].count++;
+     counts[emoji].users.push(user);
+  });
+  if (Object.keys(counts).length === 0) return null;
+  return (
+     <div className={`flex flex-wrap gap-1 mt-1 ${isMe ? 'justify-end' : 'justify-start'}`}>
+        {Object.entries(counts).map(([emoji, data]) => (
+            <button key={emoji} onClick={() => onToggle(emoji)} title={data.users.join(', ')} className="text-[10px] bg-white border border-zinc-200 shadow-sm rounded-full px-1.5 py-0.5 flex items-center gap-1 hover:bg-zinc-50 z-10 transition-transform hover:scale-105">
+               <span>{emoji}</span><span className="font-bold text-zinc-500">{data.count}</span>
+            </button>
+        ))}
+     </div>
+  )
 };
 
 export default function App() {
@@ -54,6 +78,7 @@ export default function App() {
   const [showTaskModal, setShowTaskModal] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
   const [alertConfig, setAlertConfig] = useState(null);
+  const [undoAction, setUndoAction] = useState(null); // Global Undo State
 
   // Progress Update State
   const [localSlider, setLocalSlider] = useState({});
@@ -75,7 +100,6 @@ export default function App() {
   const [editingUserId, setEditingUserId] = useState(null);
   const [editUserName, setEditUserName] = useState('');
 
-  // Dynamically load PDF Generator on mount
   useEffect(() => {
     if (!window.html2pdf) {
       const script = document.createElement('script');
@@ -88,9 +112,13 @@ export default function App() {
   useEffect(() => {
     const initAuth = async () => {
       try {
-        await signInAnonymously(auth);
+        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+          await signInWithCustomToken(auth, __initial_auth_token);
+        } else {
+          await signInAnonymously(auth);
+        }
       } catch (e) { 
-        console.warn("Anonymous auth skipped or failed, falling back to read-only mode if permissions allow.");
+        console.warn("Auth setup issue:", e);
       }
     };
     initAuth();
@@ -98,25 +126,29 @@ export default function App() {
     return unsub;
   }, []);
 
+  // INSTANT FETCH: No fbUser gatekeeper! Guests on Share Links get instant access.
   useEffect(() => {
     const unsubTasks = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'tasks'), (snap) => {
       setTasks(snap.docs.map(d => {
         const data = d.data();
         return { id: d.id, ...data, color: data.color || getTaskColor(d.id) };
       }));
-      // Instantly set synced to true when tasks load!
       setIsSynced(true);
-    }, (err) => {
-      console.error("Tasks sync error:", err);
-      showAlert("Connection Error", "Could not connect to the database. Make sure you are online.", true);
-    });
+    }, (err) => console.warn("Tasks sync issue (normal for guests):", err));
     
     const unsubTeam = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'team'), (snap) => {
       setTeam(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    }, (err) => console.error("Team sync error:", err));
+    }, (err) => console.warn("Team sync issue:", err));
     
     return () => { unsubTasks(); unsubTeam(); };
-  }, []);
+  }, []); // Run exactly once on mount, regardless of login state!
+
+  useEffect(() => {
+    if (undoAction) {
+       const timer = setTimeout(() => setUndoAction(null), 7000);
+       return () => clearTimeout(timer);
+    }
+  }, [undoAction]);
 
   const showAlert = (title, message, isError = false, onConfirm = null) => {
     setAlertConfig({ title, message, isError, onConfirm });
@@ -188,8 +220,27 @@ export default function App() {
 
   const handleLogout = () => setUserRole({ role: 'guest', username: '' });
 
+  // Team Management Implementations
+  const addTeamMember = async (name, role) => {
+     if (!name.trim()) return;
+     const newId = generateId();
+     await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'team', newId), { id: newId, name: name.trim(), role });
+  };
+  
+  const editTeamMember = async (member, newName) => {
+     if (!newName.trim()) return;
+     await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'team', member.id), { name: newName.trim() });
+     setEditingUserId(null);
+  };
+  
+  const removeTeamMember = async (member) => {
+     showAlert("Remove User", `Are you sure you want to remove ${member.name}?`, false, async () => {
+        await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'team', member.id));
+     });
+  };
+
   const saveTask = async (taskData) => {
-    const id = taskData.id || Date.now().toString();
+    const id = taskData.id || generateId();
     const task = { ...taskData, id, color: taskData.color || getTaskColor(id) };
     if (!task.progress) task.progress = 0;
     if (!task.comments) task.comments = [];
@@ -202,35 +253,44 @@ export default function App() {
     }
   };
 
-  const updateTaskDates = async (taskId, startDate, endDate) => {
-    const task = tasks.find(t => t.id === taskId);
-
-    if (!task || !canEditTask(task)) {
-      showAlert("Access Denied", "You don't have permission to move this task.", true);
-      return false;
-    }
-
-    try {
-      await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'tasks', taskId), {
-        startDate,
-        endDate
-      });
-      return true;
-    } catch (err) {
-      console.error("Failed to update task dates:", err);
-      showAlert("Error", "Could not save the new task dates. Please try again.", true);
-      return false;
-    }
-  };
-
   const deleteTask = async (id) => {
+    const taskToRestore = tasks.find(t => t.id === id);
     showAlert("Delete Task", "Are you sure you want to permanently delete this task?", false, async () => {
       try {
         await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'tasks', id));
+        setUndoAction({
+           message: `Deleted task "${taskToRestore.name}"`,
+           action: async () => await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'tasks', id), taskToRestore)
+        });
       } catch (err) {
         showAlert("Error", "Could not delete task.", true);
       }
     });
+  };
+
+  const updateTaskDates = async (taskId, startDate, endDate) => {
+    const task = tasks.find(t => t.id === taskId);
+    if (!task || !canEditTask(task)) {
+      showAlert("Access Denied", "You don't have permission to move this task.", true);
+      return false;
+    }
+    
+    if (task.startDate === startDate && task.endDate === endDate) return true;
+    
+    const originalStart = task.startDate;
+    const originalEnd = task.endDate;
+
+    try {
+      await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'tasks', taskId), { startDate, endDate });
+      setUndoAction({
+         message: `Rescheduled task "${task.name}"`,
+         action: async () => await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'tasks', taskId), { startDate: originalStart, endDate: originalEnd })
+      });
+      return true;
+    } catch (err) {
+      showAlert("Error", "Could not save the new task dates. Please try again.", true);
+      return false;
+    }
   };
 
   const cancelProgressUpdate = () => {
@@ -244,9 +304,8 @@ export default function App() {
     const { task, newProgress } = progressUpdate;
     
     try {
-      // 1. Create the dedicated audit trail object
       const newAuditUpdate = {
-        id: Date.now().toString(),
+        id: generateId(),
         author: userRole.username,
         text: note,
         from: task.progress || 0,
@@ -254,13 +313,11 @@ export default function App() {
         timestamp: new Date().toISOString()
       };
 
-      // 2. Save directly to a separate "updates" array (not mixed with comments)
       await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'tasks', task.id), { 
         progress: newProgress,
         updates: [...(task.updates || []), newAuditUpdate]
       });
 
-      // 3. Cleanup UI
       setLocalSlider(prev => { const next = {...prev}; delete next[task.id]; return next; });
       setProgressUpdate(null);
     } catch (err) {
@@ -271,7 +328,7 @@ export default function App() {
   const addComment = async (taskId, text) => {
     if (!text.trim()) return;
     const task = tasks.find(t => t.id === taskId);
-    const newComment = { id: Date.now().toString(), author: userRole.username, text, timestamp: new Date().toISOString(), replies: [] };
+    const newComment = { id: generateId(), author: userRole.username, text, timestamp: new Date().toISOString(), replies: [], reactions: {} };
     await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'tasks', taskId), {
       comments: [...(task.comments || []), newComment]
     });
@@ -365,17 +422,14 @@ export default function App() {
       margin: [0.4, 0.4, 0.4, 0.4],
       filename: `Flowers_For_Mary_Report_${dateStr}.pdf`,
       image: { type: 'jpeg', quality: 0.98 },
-      // Rely on natural layout width (no windowWidth override) to preserve responsive grid perfectly
       html2canvas: { scale: 2, useCORS: true }, 
       jsPDF: { unit: 'in', format: 'letter', orientation: 'landscape' },
       pagebreak: { mode: ['avoid-all', 'css', 'legacy'], avoid: '.task-card' }
     };
 
     try {
-      // 5. Await the PDF Generation using the visible DOM
       await window.html2pdf().set(opt).from(element).save();
     } finally {
-      // 6. Instantly revert ALL changes back to normal
       details.forEach((el, i) => {
         if (!originalDetailsState[i]) el.removeAttribute('open');
       });
@@ -387,7 +441,6 @@ export default function App() {
       const tempHeader = document.getElementById('temp-pdf-header');
       if (tempHeader) tempHeader.remove();
       
-      // 7. Restore scroll position
       window.scrollTo(0, originalScrollY);
     }
   };
@@ -460,6 +513,7 @@ export default function App() {
         </div>
       </header>
 
+      {}
       <main id="report-content" className="max-w-7xl mx-auto space-y-8">
         <section className="bg-white rounded-[2rem] shadow-[0_10px_40px_rgb(0,0,0,0.03)] border border-zinc-200/50 p-6 lg:p-8">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
@@ -488,31 +542,25 @@ export default function App() {
           </div>
           <div className="border border-zinc-200/60 rounded-3xl overflow-auto bg-white p-6 shadow-sm relative custom-scrollbar" style={{ height: '460px' }}>
             {view === 'timeline' ? (
-              <Timeline
-                tasks={tasks}
-                zoomLevel={timelineZoom}
-                canEditTask={canEditTask}
-                onTaskDateChange={updateTaskDates}
-                onTaskClick={(t) => {
-                  if(canEditTask(t)) {
-                    setEditingTask(t);
-                    setShowTaskModal(true);
-                  } else {
-                    showAlert("Access Denied", "You don't have permission to edit this task.");
-                  }
-                }}
-                onTaskCreate={userRole.role !== 'viewer' && userRole.role !== 'guest' ? (dates) => { setEditingTask(dates); setShowTaskModal(true); } : undefined}
+              <Timeline 
+                tasks={tasks} 
+                zoomLevel={timelineZoom} 
+                canEditTask={canEditTask} 
+                onTaskDateChange={updateTaskDates} 
+                onTaskClick={(t) => { if(canEditTask(t)) { setEditingTask(t); setShowTaskModal(true); } else { showAlert("Access Denied", "You don't have permission to edit this task."); } }} 
+                onTaskCreate={userRole.role !== 'viewer' && userRole.role !== 'guest' ? (dates) => { setEditingTask({ ...dates, name: '', subgroup: subgroups[0] || 'General' }); setShowTaskModal(true); } : undefined}
               />
             ) : (
               <Calendar 
                 tasks={tasks} 
                 onTaskClick={(t) => { if(canEditTask(t)) { setEditingTask(t); setShowTaskModal(true); } else { showAlert("Access Denied", "You don't have permission to edit this task."); } }} 
-                onTaskCreate={userRole.role !== 'viewer' && userRole.role !== 'guest' ? (dates) => { setEditingTask(dates); setShowTaskModal(true); } : undefined}
+                onTaskCreate={userRole.role !== 'viewer' && userRole.role !== 'guest' ? (dates) => { setEditingTask({ ...dates, name: '', subgroup: subgroups[0] || 'General' }); setShowTaskModal(true); } : undefined}
               />
             )}
           </div>
         </section>
 
+        {}
         <section>
            <div className="flex items-center gap-3 mb-6 px-2">
              <div className="p-2.5 bg-violet-50 text-violet-600 rounded-2xl"><Clock size={20}/></div>
@@ -604,7 +652,7 @@ export default function App() {
                                       <MessageSquare size={14}/> {task.comments?.length || 0} Comments
                                     </summary>
                                     <div className="mt-4 space-y-3">
-                                      <CommentThread comments={task.comments || []} taskId={task.id} userRole={userRole} db={db} appId={appId} tasks={tasks} showAlert={showAlert} />
+                                      <CommentThread comments={task.comments || []} taskId={task.id} userRole={userRole} db={db} appId={appId} tasks={tasks} showAlert={showAlert} setUndoAction={setUndoAction} />
                                       {userRole.role !== 'guest' && (
                                         <form onSubmit={(e) => { e.preventDefault(); addComment(task.id, e.target.elements.comment.value); e.target.reset(); }} className="flex gap-2 mt-3 relative">
                                           <input name="comment" type="text" placeholder="Write a comment..." className="flex-1 text-sm p-3.5 pr-20 bg-white border border-zinc-200/80 rounded-2xl focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 transition-all shadow-sm font-medium" required/>
@@ -633,9 +681,19 @@ export default function App() {
         </section>
       </main>
 
+      {}
       {userRole.role !== 'guest' && <ChatPanel db={db} appId={appId} userRole={userRole} team={team} showAlert={showAlert} />}
 
-      {/* Progress Update Modal */}
+      {/* Global Undo Toast */}
+      {undoAction && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[100] bg-zinc-900 text-white px-4 py-3 rounded-2xl shadow-[0_10px_40px_rgba(0,0,0,0.3)] flex items-center gap-4 animate-in slide-in-from-bottom-5 fade-in duration-300">
+           <span className="text-sm font-medium">{undoAction.message}</span>
+           <button onClick={() => { undoAction.action(); setUndoAction(null); }} className="text-violet-400 font-bold hover:text-violet-300 transition-colors text-sm bg-white/10 px-3 py-1.5 rounded-xl">Undo</button>
+           <button onClick={() => setUndoAction(null)} className="text-zinc-400 hover:text-white transition-colors p-1"><X size={14}/></button>
+        </div>
+      )}
+
+      {/* New Progress Update Modal */}
       {progressUpdate && (
         <div className="fixed inset-0 bg-zinc-900/20 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200">
           <div className="bg-white rounded-[2rem] shadow-2xl border border-zinc-100 w-full max-w-sm p-8 animate-in zoom-in-95 duration-200">
@@ -660,7 +718,6 @@ export default function App() {
         </div>
       )}
 
-      {/* Alert Modal */}
       {alertConfig && (
         <div className="fixed inset-0 bg-zinc-900/20 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200">
           <div className="bg-white rounded-[2rem] shadow-2xl border border-zinc-100 w-full max-w-sm p-8 animate-in zoom-in-95 duration-200">
@@ -679,7 +736,6 @@ export default function App() {
         </div>
       )}
 
-      {/* Password Modal */}
       {showPasswordModal && (
         <div className="fixed inset-0 bg-zinc-900/20 backdrop-blur-sm z-[60] flex items-center justify-center p-4 animate-in fade-in duration-200">
           <div className="bg-white rounded-[2rem] shadow-2xl border border-zinc-100 w-full max-w-sm p-8 animate-in zoom-in-95 duration-200">
@@ -705,7 +761,6 @@ export default function App() {
         </div>
       )}
 
-      {/* Login Modal */}
       {showLogin && (
         <div className="fixed inset-0 bg-zinc-900/20 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
           <div className="bg-white rounded-[2rem] shadow-2xl border border-zinc-100 w-full max-w-sm p-8 animate-in zoom-in-95 duration-200">
@@ -736,7 +791,6 @@ export default function App() {
         </div>
       )}
 
-      {/* Team Modal */}
       {showTeamModal && (
         <div className="fixed inset-0 bg-zinc-900/20 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
           <div className="bg-white rounded-[2rem] shadow-2xl border border-zinc-100 w-full max-w-md p-8 animate-in zoom-in-95 duration-200">
@@ -795,11 +849,12 @@ export default function App() {
   );
 }
 
-function CommentThread({ comments, taskId, userRole, db, appId, tasks, showAlert, parentIds = [] }) {
+function CommentThread({ comments, taskId, userRole, db, appId, tasks, showAlert, setUndoAction, parentIds = [] }) {
   const [editingCommentId, setEditingCommentId] = useState(null);
   const [replyingToId, setReplyingToId] = useState(null);
+  const [reactionPickerId, setReactionPickerId] = useState(null);
 
-  const performUpdate = async (updatedComments) => {
+  const performUpdate = async (updatedComments, undoInfo = null) => {
     let newTasks = [...tasks];
     let taskIndex = newTasks.findIndex(t => t.id === taskId);
     let updatedTask = { ...newTasks[taskIndex] };
@@ -817,6 +872,7 @@ function CommentThread({ comments, taskId, userRole, db, appId, tasks, showAlert
     }
     
     await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'tasks', taskId), { comments: updatedTask.comments });
+    if (undoInfo && setUndoAction) setUndoAction(undoInfo);
   };
 
   const saveEdit = (id, newText) => {
@@ -828,15 +884,36 @@ function CommentThread({ comments, taskId, userRole, db, appId, tasks, showAlert
   const deleteComment = (id) => {
     showAlert("Delete Comment", "Remove this comment?", false, () => {
       const updated = comments.filter(c => c.id !== id);
-      performUpdate(updated);
+      const originalComments = [...comments]; // Save for undo
+      performUpdate(updated, {
+         message: "Comment deleted",
+         action: async () => await performUpdate(originalComments)
+      });
     });
   };
 
   const addReply = (parentId, text) => {
-    const newReply = { id: Date.now().toString(), author: userRole.username, text, timestamp: new Date().toISOString(), replies: [] };
+    const newReply = { id: generateId(), author: userRole.username, text, timestamp: new Date().toISOString(), replies: [], reactions: {} };
     const updated = comments.map(c => c.id === parentId ? { ...c, replies: [...(c.replies || []), newReply] } : c);
     performUpdate(updated);
     setReplyingToId(null);
+  };
+
+  const toggleReaction = (id, emoji) => {
+    if (userRole.role === 'guest') return;
+    const updated = comments.map(c => {
+      if (c.id === id) {
+        const newReactions = { ...(c.reactions || {}) };
+        if (newReactions[userRole.username] === emoji) {
+          delete newReactions[userRole.username];
+        } else {
+          newReactions[userRole.username] = emoji;
+        }
+        return { ...c, reactions: newReactions };
+      }
+      return c;
+    });
+    performUpdate(updated);
   };
 
   return (
@@ -848,17 +925,29 @@ function CommentThread({ comments, taskId, userRole, db, appId, tasks, showAlert
             <div className="bg-white p-4 rounded-2xl border border-zinc-200/60 shadow-sm text-sm group/comment relative hover:border-zinc-300 hover:shadow-md transition-all duration-300">
               <div className="flex justify-between items-start mb-1.5">
                 <div className="font-bold text-zinc-900">{c.author} <span className="text-zinc-400 font-medium text-xs ml-2">{new Date(c.timestamp).toLocaleString([], {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'})}</span></div>
-                {canEdit && editingCommentId !== c.id && (
-                  <div className="flex gap-1 opacity-0 group-hover/comment:opacity-100 transition-opacity absolute right-3 top-3 bg-white pl-2">
-                    <button onClick={() => setReplyingToId(c.id)} className="p-1.5 text-zinc-400 hover:text-blue-600 bg-zinc-50 rounded-xl transition-colors" title="Reply"><Reply size={13}/></button>
-                    <button onClick={() => setEditingCommentId(c.id)} className="p-1.5 text-zinc-400 hover:text-violet-600 bg-zinc-50 rounded-xl transition-colors" title="Edit"><Edit2 size={13}/></button>
-                    <button onClick={() => deleteComment(c.id)} className="p-1.5 text-zinc-400 hover:text-rose-600 bg-zinc-50 rounded-xl transition-colors" title="Delete"><Trash2 size={13}/></button>
-                  </div>
-                )}
-                {!canEdit && userRole.role !== 'guest' && (
-                  <div className="opacity-0 group-hover/comment:opacity-100 transition-opacity absolute right-3 top-3 bg-white pl-2">
+                
+                <div className={`flex gap-1 opacity-0 group-hover/comment:opacity-100 transition-opacity absolute right-3 top-3 bg-white pl-2 ${reactionPickerId === c.id ? 'opacity-100' : ''}`}>
+                  {userRole.role !== 'guest' && (
+                     <button onClick={() => setReactionPickerId(reactionPickerId === c.id ? null : c.id)} className="p-1.5 text-zinc-400 hover:text-amber-500 bg-zinc-50 rounded-xl transition-colors" title="React"><Smile size={13}/></button>
+                  )}
+                  {userRole.role !== 'guest' && !canEdit && (
                      <button onClick={() => setReplyingToId(c.id)} className="p-1.5 text-zinc-400 hover:text-blue-600 bg-zinc-50 rounded-xl transition-colors" title="Reply"><Reply size={13}/></button>
-                  </div>
+                  )}
+                  {canEdit && editingCommentId !== c.id && (
+                    <>
+                      <button onClick={() => setReplyingToId(c.id)} className="p-1.5 text-zinc-400 hover:text-blue-600 bg-zinc-50 rounded-xl transition-colors" title="Reply"><Reply size={13}/></button>
+                      <button onClick={() => setEditingCommentId(c.id)} className="p-1.5 text-zinc-400 hover:text-violet-600 bg-zinc-50 rounded-xl transition-colors" title="Edit"><Edit2 size={13}/></button>
+                      <button onClick={() => deleteComment(c.id)} className="p-1.5 text-zinc-400 hover:text-rose-600 bg-zinc-50 rounded-xl transition-colors" title="Delete"><Trash2 size={13}/></button>
+                    </>
+                  )}
+                </div>
+
+                {reactionPickerId === c.id && (
+                    <div className="absolute right-3 top-11 bg-white shadow-xl border border-zinc-200 rounded-full px-2 py-1 flex gap-1 z-50 animate-in zoom-in-95 duration-200">
+                        {['👍', '❤️', '😂', '😲', '👎'].map(e => (
+                            <button key={e} onClick={() => { toggleReaction(c.id, e); setReactionPickerId(null); }} className="hover:scale-125 transition-transform text-base">{e}</button>
+                        ))}
+                    </div>
                 )}
               </div>
               
@@ -871,6 +960,8 @@ function CommentThread({ comments, taskId, userRole, db, appId, tasks, showAlert
               ) : (
                 <div className="text-zinc-600 mt-1.5 break-words leading-relaxed font-medium whitespace-pre-wrap">{urlify(c.text)}</div>
               )}
+
+              {renderReactions(c.reactions, (e) => toggleReaction(c.id, e))}
             </div>
             
             {replyingToId === c.id && (
@@ -885,7 +976,7 @@ function CommentThread({ comments, taskId, userRole, db, appId, tasks, showAlert
 
             {c.replies && c.replies.length > 0 && (
               <div className="mt-3">
-                 <CommentThread comments={c.replies} taskId={taskId} userRole={userRole} db={db} appId={appId} tasks={tasks} showAlert={showAlert} parentIds={[...parentIds, c.id]} />
+                 <CommentThread comments={c.replies} taskId={taskId} userRole={userRole} db={db} appId={appId} tasks={tasks} showAlert={showAlert} setUndoAction={setUndoAction} parentIds={[...parentIds, c.id]} />
               </div>
             )}
           </div>
@@ -930,7 +1021,7 @@ function TaskFormModal({ task, onClose, onSave, subgroups, assignees }) {
         <form onSubmit={handleSubmit} className="space-y-5">
           <div>
             <label className="block text-xs font-bold text-zinc-700 mb-1.5 ml-1 uppercase tracking-wider">Task Name</label>
-            <input type="text" required value={name} onChange={e => setName(e.target.value)} className="w-full p-4 bg-zinc-50 border border-zinc-200 rounded-2xl focus:bg-white focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 outline-none transition-all font-semibold text-sm shadow-sm" />
+            <input type="text" required autoFocus value={name} onChange={e => setName(e.target.value)} className="w-full p-4 bg-zinc-50 border border-zinc-200 rounded-2xl focus:bg-white focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 outline-none transition-all font-semibold text-sm shadow-sm" />
           </div>
           <div>
             <label className="block text-xs font-bold text-zinc-700 mb-1.5 ml-1 uppercase tracking-wider">Subgroup</label>
@@ -938,7 +1029,7 @@ function TaskFormModal({ task, onClose, onSave, subgroups, assignees }) {
               {subgroups.map(sg => <option key={sg} value={sg}>{sg}</option>)}
               <option value="NEW" className="font-bold text-violet-600">+ Create New Subgroup...</option>
             </select>
-            {subgroupMode === 'new' && <input type="text" autoFocus required placeholder="Type new subgroup name..." value={subgroupNew} onChange={e => setSubgroupNew(e.target.value)} className="w-full p-4 bg-white border border-violet-300 rounded-2xl focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 outline-none transition-all font-semibold shadow-sm text-sm" />}
+            {subgroupMode === 'new' && <input type="text" required placeholder="Type new subgroup name..." value={subgroupNew} onChange={e => setSubgroupNew(e.target.value)} className="w-full p-4 bg-white border border-violet-300 rounded-2xl focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 outline-none transition-all font-semibold shadow-sm text-sm" />}
           </div>
           <div>
             <label className="block text-xs font-bold text-zinc-700 mb-1.5 ml-1 uppercase tracking-wider">Assignee</label>
@@ -991,6 +1082,7 @@ function ChatPanel({ db, appId, userRole, team, showAlert }) {
   const [userSearch, setUserSearch] = useState('');
   const [unreadCounts, setUnreadCounts] = useState({});
   const [onlineUsers, setOnlineUsers] = useState({});
+  const [reactionPickerId, setReactionPickerId] = useState(null);
   const messagesEndRef = useRef(null);
 
   const audioCtxRef = useRef(null);
@@ -1033,7 +1125,7 @@ function ChatPanel({ db, appId, userRole, team, showAlert }) {
   }, [userRole.username, db, appId]);
 
   useEffect(() => {
-    const unsubChannels = onSnapshot(query(collection(db, 'artifacts', appId, 'public', 'data', 'chatChannels')), (snap) => {
+    const unsubChannels = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'chatChannels'), (snap) => {
       let chs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       chs = chs.filter(ch => ch.id === 'general' || ch.participants?.includes(userRole.username) || userRole.role === 'manager');
       if (!chs.find(c => c.id === 'general')) chs.unshift({ id: 'general', name: 'Team Chat', participants: [] });
@@ -1043,8 +1135,10 @@ function ChatPanel({ db, appId, userRole, team, showAlert }) {
   }, [db, appId, userRole]);
 
   useEffect(() => {
-    const unsubMessages = onSnapshot(query(collection(db, 'artifacts', appId, 'public', 'data', 'chatMessages'), orderBy('timestamp', 'asc')), (snap) => {
+    // Removed orderBy() so it works perfectly without indices on Share Links
+    const unsubMessages = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'chatMessages'), (snap) => {
        const allMsgs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+       allMsgs.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0)); // Sort safely in memory
        
        if (activeChannel) setMessages(allMsgs.filter(m => m.channelId === activeChannel.id));
        
@@ -1097,10 +1191,24 @@ function ChatPanel({ db, appId, userRole, team, showAlert }) {
       channelId: activeChannel.id,
       author: userRole.username,
       text: newMessage,
-      timestamp: Date.now()
+      timestamp: Date.now(),
+      reactions: {}
     });
     setNewMessage('');
     markRead(activeChannel.id);
+  };
+
+  const toggleChatReaction = async (messageId, emoji, currentReactions = {}) => {
+      if (userRole.role === 'guest') return;
+      const newReactions = { ...currentReactions };
+      if (newReactions[userRole.username] === emoji) {
+          delete newReactions[userRole.username];
+      } else {
+          newReactions[userRole.username] = emoji;
+      }
+      await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'chatMessages', messageId), {
+          reactions: newReactions
+      });
   };
 
   const createChannel = async () => {
@@ -1242,11 +1350,34 @@ function ChatPanel({ db, appId, userRole, team, showAlert }) {
                         const isMe = m.author === userRole.username;
                         const showAuthor = idx === 0 || messages[idx-1].author !== m.author;
                         return (
-                           <div key={m.id} className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
+                           <div key={m.id} className={`flex flex-col ${isMe ? 'items-end' : 'items-start'} group/msg relative mb-2`}>
                               {showAuthor && !isMe && <span className="text-[10px] font-bold text-zinc-400 mb-1 px-1 ml-1">{m.author}</span>}
-                              <div className={`px-4 py-3 rounded-2xl max-w-[85%] text-sm break-words shadow-sm font-medium ${isMe ? 'bg-zinc-900 text-white rounded-br-sm' : 'bg-white border border-zinc-200/80 text-zinc-800 rounded-bl-sm'}`}>
-                                 {urlify(m.text)}
+                              <div className="relative flex items-center gap-2">
+                                 {!isMe && (
+                                     <div className={`opacity-0 group-hover/msg:opacity-100 transition-opacity ${reactionPickerId === m.id ? 'opacity-100' : ''}`}>
+                                         <button onClick={() => setReactionPickerId(reactionPickerId === m.id ? null : m.id)} className="p-1 text-zinc-400 hover:text-amber-500 transition-colors"><Smile size={14}/></button>
+                                     </div>
+                                 )}
+
+                                 <div className={`px-4 py-3 rounded-2xl max-w-[85%] text-sm break-words shadow-sm font-medium ${isMe ? 'bg-zinc-900 text-white rounded-br-sm' : 'bg-white border border-zinc-200/80 text-zinc-800 rounded-bl-sm'}`}>
+                                    {urlify(m.text)}
+                                 </div>
+
+                                 {isMe && (
+                                     <div className={`opacity-0 group-hover/msg:opacity-100 transition-opacity ${reactionPickerId === m.id ? 'opacity-100' : ''}`}>
+                                         <button onClick={() => setReactionPickerId(reactionPickerId === m.id ? null : m.id)} className="p-1 text-zinc-400 hover:text-amber-500 transition-colors"><Smile size={14}/></button>
+                                     </div>
+                                 )}
+
+                                 {reactionPickerId === m.id && (
+                                     <div className={`absolute ${isMe ? 'right-full mr-2' : 'left-full ml-2'} top-0 bg-white shadow-xl border border-zinc-200 rounded-full px-2 py-1 flex gap-1 z-50 animate-in zoom-in duration-200`}>
+                                         {['👍', '❤️', '😂', '😲', '👎'].map(e => (
+                                             <button key={e} onClick={() => { toggleChatReaction(m.id, e, m.reactions); setReactionPickerId(null); }} className="hover:scale-125 transition-transform text-base">{e}</button>
+                                         ))}
+                                     </div>
+                                 )}
                               </div>
+                              {renderReactions(m.reactions, (e) => toggleChatReaction(m.id, e, m.reactions), isMe)}
                            </div>
                         )
                      })}
@@ -1291,7 +1422,6 @@ function Timeline({
 
   const parseDate = (dateStr) => {
     if (!dateStr) return null;
-
     const [year, month, day] = dateStr.split('-').map(Number);
     return new Date(year, month - 1, day);
   };
@@ -1365,15 +1495,11 @@ function Timeline({
         newEnd = addDays(originalEnd, deltaDays);
       } else if (interaction.mode === 'resize-start') {
         newStart = addDays(originalStart, deltaDays);
-
-        // Keep the task at least one day long.
         if (newStart > originalEnd) {
           newStart = originalEnd;
         }
       } else if (interaction.mode === 'resize-end') {
         newEnd = addDays(originalEnd, deltaDays);
-
-        // Keep the task at least one day long.
         if (newEnd < originalStart) {
           newEnd = originalStart;
         }
@@ -1439,8 +1565,6 @@ function Timeline({
     };
   }, [zoomLevel, onTaskDateChange, canEditTask]);
 
-  // Once Firestore sends the updated task back through onSnapshot,
-  // remove the temporary local draft for that task.
   useEffect(() => {
     setDraftDates(prev => {
       let changed = false;
@@ -1468,17 +1592,26 @@ function Timeline({
     });
   }, [tasks]);
 
+  if (!tasks.length) {
+    return (
+      <div className="h-full flex flex-col items-center justify-center text-zinc-400 gap-3">
+        <div className="w-12 h-12 bg-zinc-100 rounded-2xl flex items-center justify-center">
+          <CalendarIcon size={20} className="text-zinc-300" />
+        </div>
+        <p className="font-semibold text-sm">No tasks to display</p>
+      </div>
+    );
+  }
+
   const allDates = tasks.flatMap(t => [
     parseDate(t.startDate),
     parseDate(t.endDate)
   ]).filter(Boolean);
 
-  const safeMin = allDates.length ? Math.min(...allDates) : Date.now();
-  const minDate = new Date(safeMin);
+  const minDate = new Date(Math.min(...allDates));
   minDate.setDate(minDate.getDate() - 7);
 
-  const safeMax = allDates.length ? Math.max(...allDates) : Date.now();
-  const maxDate = new Date(safeMax);
+  const maxDate = new Date(Math.max(...allDates));
   maxDate.setDate(maxDate.getDate() + 14);
 
   const totalDays = Math.ceil((maxDate - minDate) / DAY_MS);
@@ -1530,7 +1663,7 @@ function Timeline({
       setCreationDrag(prev => prev ? { ...prev, currentIdx: moveDayIndex } : null);
     };
 
-    const onPointerUp = (upEvent) => {
+    const onPointerUp = () => {
       window.removeEventListener('pointermove', onPointerMove);
       window.removeEventListener('pointerup', onPointerUp);
 
@@ -1621,7 +1754,7 @@ function Timeline({
         <div 
           className="absolute inset-0 flex pt-6 z-0"
           onPointerDown={handleBgPointerDown}
-          style={{ touchAction: 'none', cursor: onTaskCreate ? 'crosshair' : 'default' }}
+          style={{ touchAction: 'none' }}
         >
           {Array.from({ length: totalDays }).map((_, i) => {
             const d = addDays(minDate, i);
@@ -1885,7 +2018,7 @@ function Calendar({ tasks, onTaskClick, onTaskCreate }) {
                     return (
                        <div 
                          key={dIdx} 
-                         className={`p-2 select-none cursor-pointer ${day.isCurrentMonth ? 'bg-white' : 'bg-zinc-50'} ${isDraggingThisDay ? 'ring-2 ring-inset ring-violet-500 bg-violet-50' : ''}`}
+                         className={`p-2 select-none ${day.isCurrentMonth ? 'bg-white' : 'bg-zinc-50'} ${isDraggingThisDay ? 'ring-2 ring-inset ring-violet-500 bg-violet-50' : ''}`}
                          onMouseDown={() => handleDayMouseDown(day.dateStr)}
                          onMouseEnter={() => handleDayMouseEnter(day.dateStr)}
                          onMouseUp={() => handleDayMouseUp(day.dateStr)}
