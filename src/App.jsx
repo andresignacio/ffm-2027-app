@@ -81,6 +81,7 @@ export default function App() {
   const [undoAction, setUndoAction] = useState(null); // Global Undo State
   const [onlineUsers, setOnlineUsers] = useState({});
   const [showOnlinePopover, setShowOnlinePopover] = useState(false);
+  const onlinePopoverRef = useRef(null);
   const [expandedComments, setExpandedComments] = useState({});
 
   // Progress Update State
@@ -152,6 +153,28 @@ export default function App() {
        return () => clearTimeout(timer);
     }
   }, [undoAction]);
+
+  useEffect(() => {
+    if (!showOnlinePopover) return;
+
+    const handleOutsidePointerDown = (e) => {
+      if (onlinePopoverRef.current && !onlinePopoverRef.current.contains(e.target)) {
+        setShowOnlinePopover(false);
+      }
+    };
+
+    const handleEscape = (e) => {
+      if (e.key === 'Escape') setShowOnlinePopover(false);
+    };
+
+    document.addEventListener('pointerdown', handleOutsidePointerDown);
+    document.addEventListener('keydown', handleEscape);
+
+    return () => {
+      document.removeEventListener('pointerdown', handleOutsidePointerDown);
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, [showOnlinePopover]);
 
   // Global presence: independent of Chat being open.
   useEffect(() => {
@@ -549,7 +572,7 @@ export default function App() {
         </div>
         
         {userRole.role !== 'guest' && (
-          <div className="relative">
+          <div ref={onlinePopoverRef} className="relative">
             <button
               onClick={() => setShowOnlinePopover(v => !v)}
               className="flex items-center gap-2 px-3.5 py-2.5 bg-white border border-zinc-200/80 rounded-2xl hover:bg-zinc-50 hover:border-zinc-300 transition-all shadow-sm font-bold text-sm"
