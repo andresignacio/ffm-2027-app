@@ -81,6 +81,7 @@ export default function App() {
   const [undoAction, setUndoAction] = useState(null); // Global Undo State
   const [onlineUsers, setOnlineUsers] = useState({});
   const [showOnlinePopover, setShowOnlinePopover] = useState(false);
+  const [expandedComments, setExpandedComments] = useState({});
 
   // Progress Update State
   const [localSlider, setLocalSlider] = useState({});
@@ -611,12 +612,12 @@ export default function App() {
                     <Users size={16} className="text-zinc-500" /> Users
                   </button>
                   <div className="flex bg-white border border-zinc-200/80 rounded-2xl shadow-sm p-1 gap-1">
-                    <button onClick={handleExport} className="flex items-center justify-center p-2 text-emerald-600 hover:bg-emerald-50 rounded-xl transition-colors font-semibold text-sm px-3" title="Export Data">
-                      <Download size={16} className="mr-1.5" /> Export
+                    <button onClick={handleExport} className="flex items-center justify-center w-10 h-10 text-emerald-600 hover:bg-emerald-50 rounded-xl transition-colors" title="Export Data" aria-label="Export Data">
+                      <Download size={17} />
                     </button>
                     <div className="w-px bg-zinc-200 my-1"></div>
-                    <label className="flex items-center justify-center p-2 text-blue-600 hover:bg-blue-50 rounded-xl transition-colors cursor-pointer font-semibold text-sm px-3" title="Import Data">
-                      <Upload size={16} className="mr-1.5" /> Import
+                    <label className="flex items-center justify-center w-10 h-10 text-blue-600 hover:bg-blue-50 rounded-xl transition-colors cursor-pointer" title="Import Data" aria-label="Import Data">
+                      <Upload size={17} />
                       <input type="file" onChange={handleImport} accept="application/json,.json" className="hidden" />
                     </label>
                   </div>
@@ -628,7 +629,7 @@ export default function App() {
               </button>
               
               {userRole.role !== 'viewer' && (
-                <button onClick={() => { setEditingTask(null); setShowTaskModal(true); }} className="flex items-center gap-2 px-6 py-2.5 bg-violet-600 text-white rounded-2xl hover:bg-violet-700 hover:shadow-[0_8px_25px_rgba(124,58,237,0.35)] hover:-translate-y-0.5 transition-all duration-300 font-bold text-sm">
+                <button onClick={() => { setEditingTask(null); setShowTaskModal(true); }} className="flex items-center gap-2 px-4 py-2.5 bg-violet-600 text-white rounded-2xl hover:bg-violet-700 hover:shadow-[0_8px_25px_rgba(124,58,237,0.35)] hover:-translate-y-0.5 transition-all duration-300 font-bold text-sm">
                   <Plus size={16} /> New Task
                 </button>
               )}
@@ -775,20 +776,68 @@ export default function App() {
                                     </div>
                                   </details>
 
-                                  <details className="group/details" open={task.comments?.length > 0}>
-                                    <summary className={`text-xs cursor-pointer flex items-center gap-2 transition-colors select-none ${task.comments?.length > 0 ? 'font-bold text-violet-600' : 'font-semibold text-zinc-400 hover:text-zinc-600'}`}>
-                                      <MessageSquare size={14}/> {task.comments?.length || 0} Comments
-                                    </summary>
-                                    <div className="mt-4 space-y-3">
-                                      <CommentThread comments={task.comments || []} taskId={task.id} userRole={userRole} db={db} appId={appId} tasks={tasks} showAlert={showAlert} setUndoAction={setUndoAction} />
-                                      {userRole.role !== 'guest' && (
-                                        <form onSubmit={(e) => { e.preventDefault(); addComment(task.id, e.target.elements.comment.value); e.target.reset(); }} className="flex gap-2 mt-3 relative">
-                                          <input name="comment" type="text" placeholder="Write a comment..." className="flex-1 text-sm p-3.5 pr-20 bg-white border border-zinc-200/80 rounded-2xl focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 transition-all shadow-sm font-medium" required/>
-                                          <button type="submit" className="absolute right-2 top-2 bottom-2 px-4 bg-zinc-900 text-white text-xs font-bold rounded-xl hover:bg-zinc-800 transition-all shadow-sm">Post</button>
-                                        </form>
-                                      )}
-                                    </div>
-                                  </details>
+                                  {(() => {
+                                    const taskComments = Array.isArray(task.comments) ? task.comments : [];
+                                    const isExpanded = !!expandedComments[task.id];
+                                    const latestComments = [...taskComments]
+                                      .sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0))
+                                      .slice(0, 2)
+                                      .sort((a, b) => new Date(a.timestamp || 0) - new Date(b.timestamp || 0));
+
+                                    return (
+                                      <div className="mt-5 pt-4 border-t border-zinc-200/60">
+                                        <div className="flex items-center justify-between gap-3">
+                                          <div className={`text-xs flex items-center gap-2 ${taskComments.length ? 'font-bold text-violet-600' : 'font-semibold text-zinc-400'}`}>
+                                            <MessageSquare size={14}/> {taskComments.length} {taskComments.length === 1 ? 'Comment' : 'Comments'}
+                                          </div>
+                                          {taskComments.length > 0 && (
+                                            <button
+                                              type="button"
+                                              onClick={() => setExpandedComments(prev => ({ ...prev, [task.id]: !prev[task.id] }))}
+                                              className="text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-lg bg-violet-50 text-violet-700 hover:bg-violet-100 transition-colors"
+                                            >
+                                              {isExpanded ? 'Collapse' : 'Show All'}
+                                            </button>
+                                          )}
+                                        </div>
+
+                                        {!isExpanded && taskComments.length > 0 && (
+                                          <div className="mt-3 space-y-2">
+                                            {latestComments.map(c => (
+                                              <div key={c.id} className="bg-white p-3 rounded-xl border border-zinc-200/60 shadow-sm text-xs">
+                                                <div className="flex items-center gap-2 mb-1">
+                                                  <span className="font-bold text-zinc-900">{c.author}</span>
+                                                  <span className="text-zinc-400 font-medium text-[10px]">
+                                                    {c.timestamp ? new Date(c.timestamp).toLocaleString([], { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' }) : ''}
+                                                  </span>
+                                                </div>
+                                                <div className="text-zinc-600 leading-relaxed font-medium line-clamp-2">
+                                                  {typeof c.text === 'string' ? c.text : ''}
+                                                </div>
+                                                {c.replies?.length > 0 && (
+                                                  <div className="mt-1 text-[10px] text-zinc-400 font-semibold">
+                                                    {c.replies.length} {c.replies.length === 1 ? 'reply' : 'replies'}
+                                                  </div>
+                                                )}
+                                              </div>
+                                            ))}
+                                          </div>
+                                        )}
+
+                                        {isExpanded && (
+                                          <div className="mt-4 space-y-3">
+                                            <CommentThread comments={taskComments} taskId={task.id} userRole={userRole} db={db} appId={appId} tasks={tasks} showAlert={showAlert} setUndoAction={setUndoAction} />
+                                            {userRole.role !== 'guest' && (
+                                              <form onSubmit={(e) => { e.preventDefault(); addComment(task.id, e.target.elements.comment.value); e.target.reset(); }} className="flex gap-2 mt-3 relative">
+                                                <input name="comment" type="text" placeholder="Write a comment..." className="flex-1 text-sm p-3.5 pr-20 bg-white border border-zinc-200/80 rounded-2xl focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 transition-all shadow-sm font-medium" required/>
+                                                <button type="submit" className="absolute right-2 top-2 bottom-2 px-4 bg-zinc-900 text-white text-xs font-bold rounded-xl hover:bg-zinc-800 transition-all shadow-sm">Post</button>
+                                              </form>
+                                            )}
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })()}
 
                                 </div>
                              </div>
