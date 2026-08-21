@@ -83,6 +83,8 @@ export default function App() {
   // UI State
   const [view, setView] = useState('timeline');
   const [timelineZoom, setTimelineZoom] = useState(44);
+  const [boardHeight, setBoardHeight] = useState(620);
+  const [boardMaximized, setBoardMaximized] = useState(false);
   const [showLogin, setShowLogin] = useState(false);
   const [showTeamModal, setShowTeamModal] = useState(false);
   const [showTaskModal, setShowTaskModal] = useState(false);
@@ -737,7 +739,7 @@ export default function App() {
               </div>
             </div>
           </div>
-          <div className="border border-zinc-200/60 rounded-3xl overflow-auto bg-white p-6 shadow-sm relative custom-scrollbar" style={{ height: '460px' }}>
+          <div className={`border border-zinc-200/60 rounded-3xl overflow-hidden bg-white p-6 shadow-sm relative ${view === 'board' ? 'overflow-visible' : 'custom-scrollbar overflow-auto'}`} style={{ height: view === 'board' ? `${boardHeight}px` : '460px' }}>
             {view === 'timeline' ? (
               <Timeline 
                 tasks={tasks} 
@@ -759,6 +761,11 @@ export default function App() {
                 canEditTask={canEditTask}
                 onTaskClick={(t) => { if(canEditTask(t)) { setEditingTask(t); setShowTaskModal(true); } else { showAlert("Access Denied", "You don't have permission to edit this task."); } }}
                 onTaskStatusChange={updateTaskStatus}
+                boardHeight={boardHeight}
+                onBoardHeightChange={setBoardHeight}
+                maximized={boardMaximized}
+                onMaximize={() => setBoardMaximized(true)}
+                onRestore={() => setBoardMaximized(false)}
               />
             )}
           </div>
@@ -1646,10 +1653,39 @@ function ChatPanel({ db, appId, userRole, team, showAlert, onlineUsers }) {
   );
 }
 
-function KanbanBoard({ tasks, canEditTask, onTaskClick, onTaskStatusChange }) {
+function KanbanBoard({ tasks, canEditTask, onTaskClick, onTaskStatusChange, boardHeight, onBoardHeightChange, maximized, onMaximize, onRestore }) {
   const [draggedTaskId, setDraggedTaskId] = useState(null);
   const [activeDropZone, setActiveDropZone] = useState(null);
   const [filter, setFilter] = useState('all');
+  const resizeRef = useRef(null);
+
+  useEffect(() => {
+    const onMove = (e) => {
+      if (!resizeRef.current) return;
+      const delta = e.clientY - resizeRef.current.startY;
+      const next = Math.max(380, Math.min(Math.round(window.innerHeight - 140), resizeRef.current.startHeight + delta));
+      onBoardHeightChange(next);
+    };
+    const onUp = () => {
+      resizeRef.current = null;
+      document.body.style.userSelect = '';
+      document.body.style.cursor = '';
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    return () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+    };
+  }, [onBoardHeightChange]);
+
+  const beginResize = (e) => {
+    if (maximized) return;
+    e.preventDefault();
+    resizeRef.current = { startY: e.clientY, startHeight: boardHeight };
+    document.body.style.userSelect = 'none';
+    document.body.style.cursor = 'ns-resize';
+  };
 
   const visibleTasks = tasks.filter(task => filter === 'all' || getTaskStatus(task) === filter);
 
@@ -1691,21 +1727,26 @@ function KanbanBoard({ tasks, canEditTask, onTaskClick, onTaskStatusChange }) {
   };
 
   return (
-    <div className="h-full flex flex-col min-w-0">
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+    <div className={maximized ? 'fixed inset-4 z-[90] bg-white rounded-3xl shadow-[0_25px_80px_rgba(0,0,0,0.25)] border border-zinc-200 p-5 flex flex-col min-w-0' : 'h-full flex flex-col min-w-0 relative'} style={maximized ? { height: 'calc(100vh - 2rem)' } : undefined}>
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-4 shrink-0">
         <div>
           <h3 className="text-base font-extrabold text-zinc-900 tracking-tight">Task Board</h3>
           <p className="text-[11px] font-semibold text-zinc-400 mt-0.5">Drag a task between columns to change its stage.</p>
         </div>
-        <div className="flex items-center gap-1.5 bg-zinc-50 border border-zinc-200/60 rounded-xl p-1">
-          <button onClick={() => setFilter('all')} className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-colors ${filter === 'all' ? 'bg-white shadow-sm text-zinc-900' : 'text-zinc-400 hover:text-zinc-700'}`}>All</button>
-          {KANBAN_COLUMNS.map(column => (
-            <button key={column.id} onClick={() => setFilter(column.id)} className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-colors ${filter === column.id ? 'bg-white shadow-sm text-zinc-900' : 'text-zinc-400 hover:text-zinc-700'}`}>{column.label}</button>
-          ))}
+        <div className="flex items-center gap-2 flex-wrap justify-end">
+          <div className="flex items-center gap-1.5 bg-zinc-50 border border-zinc-200/60 rounded-xl p-1">
+            <button onClick={() => setFilter('all')} className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-colors ${filter === 'all' ? 'bg-white shadow-sm text-zinc-900' : 'text-zinc-400 hover:text-zinc-700'}`}>All</button>
+            {KANBAN_COLUMNS.map(column => (
+              <button key={column.id} onClick={() => setFilter(column.id)} className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-colors ${filter === column.id ? 'bg-white shadow-sm text-zinc-900' : 'text-zinc-400 hover:text-zinc-700'}`}>{column.label}</button>
+            ))}
+          </div>
+          <button onClick={maximized ? onRestore : onMaximize} className="px-3 py-1.5 rounded-xl bg-white border border-zinc-200 text-zinc-600 hover:text-zinc-900 hover:border-zinc-300 text-[10px] font-black uppercase tracking-wider shadow-sm">
+            {maximized ? 'Exit Full Board' : 'Maximize'}
+          </button>
         </div>
       </div>
 
-      <div className="flex-1 overflow-x-auto overflow-y-hidden custom-scrollbar pb-2">
+      <div className="flex-1 overflow-x-auto overflow-y-hidden custom-scrollbar pb-2 min-h-0">
         <div className="grid grid-cols-5 gap-3 min-w-[1180px] h-full">
           {KANBAN_COLUMNS.map(column => {
             const columnTasks = visibleTasks.filter(task => getTaskStatus(task) === column.id);
@@ -1797,6 +1838,15 @@ function KanbanBoard({ tasks, canEditTask, onTaskClick, onTaskStatusChange }) {
           })}
         </div>
       </div>
+      {!maximized && (
+        <div
+          onPointerDown={beginResize}
+          className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-20 h-4 rounded-full flex items-center justify-center cursor-ns-resize group"
+          title="Drag to resize board"
+        >
+          <div className="w-10 h-1.5 rounded-full bg-zinc-300 group-hover:bg-violet-400 transition-colors" />
+        </div>
+      )}
     </div>
   );
 }
