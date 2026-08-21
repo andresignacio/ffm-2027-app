@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, onAuthStateChanged, signInAnonymously, signInWithCustomToken } from 'firebase/auth';
 import { getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc, updateDoc, getDoc, query, orderBy, addDoc, serverTimestamp } from 'firebase/firestore';
-import { Calendar as CalendarIcon, Clock, Users, User, LogIn, LogOut, Plus, Download, Upload, FileText, MessageSquare, Trash2, Edit2, AlertCircle, Key, Eye, EyeOff, X, Check, ArrowLeft, Send, Reply, TrendingUp, Smile, Bell } from 'lucide-react';
+import { Calendar as CalendarIcon, Clock, Users, User, LogIn, LogOut, Plus, Download, Upload, FileText, MessageSquare, Trash2, Edit2, AlertCircle, Key, Eye, EyeOff, X, Check, ArrowLeft, Send, Reply, TrendingUp, Smile } from 'lucide-react';
 
 const firebaseConfig = {
   apiKey: "AIzaSyAKYltJBn7OkCqMjO2NY_c8edWUgPJlgZY",
@@ -43,319 +43,6 @@ const urlify = (text) => {
   );
 };
 
-// Lightweight, dependency-free Markdown-ish renderer for chat/comments.
-// Supported: **bold**, *italic*, _italic_, <u>underline</u>, ~~strike~~,
-// `inline code`, [label](https://...), bullet/numbered lists, blockquotes,
-// and plain URLs. HTML tags other than the explicit underline syntax are treated as text.
-const escapeHtml = (value) => String(value ?? '')
-  .replace(/&/g, '&amp;')
-  .replace(/</g, '&lt;')
-  .replace(/>/g, '&gt;')
-  .replace(/"/g, '&quot;')
-  .replace(/'/g, '&#39;');
-
-// Legacy Markdown renderer -> safe HTML string for backward compatibility with
-// comments/messages that were saved before the rich-text editor was introduced.
-const markdownToHtml = (text) => {
-  const lines = String(text ?? '').split('\n');
-  const out = [];
-  let listType = null;
-  let listItems = [];
-
-  const inline = (source) => {
-    let html = escapeHtml(source);
-
-    html = html.replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g,
-      '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
-    html = html.replace(/(https?:\/\/[^\s<]+)/g,
-      '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>');
-    html = html.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
-    html = html.replace(/__([^_\n]+)__/g, '<u>$1</u>');
-    html = html.replace(/~~([^~\n]+)~~/g, '<s>$1</s>');
-    html = html.replace(/`([^`\n]+)`/g, '<code>$1</code>');
-    html = html.replace(/\*([^*\n]+)\*/g, '<em>$1</em>');
-    html = html.replace(/_([^_\n]+)_/g, '<em>$1</em>');
-    html = html.replace(/&lt;u&gt;([^&\n]+)&lt;\/u&gt;/gi, '<u>$1</u>');
-    return html;
-  };
-
-  const flush = () => {
-    if (!listType) return;
-    out.push(`<${listType}>${listItems.map(item => `<li>${inline(item)}</li>`).join('')}</${listType}>`);
-    listType = null;
-    listItems = [];
-  };
-
-  lines.forEach(line => {
-    const bullet = line.match(/^\s*[-*]\s+(.*)$/);
-    const numbered = line.match(/^\s*\d+[.)]\s+(.*)$/);
-    const quote = line.match(/^\s*>\s?(.*)$/);
-
-    if (bullet || numbered) {
-      const desired = bullet ? 'ul' : 'ol';
-      if (listType && listType !== desired) flush();
-      if (!listType) listType = desired;
-      listItems.push((bullet || numbered)[1]);
-      return;
-    }
-
-    flush();
-    if (quote) {
-      out.push(`<blockquote>${inline(quote[1])}</blockquote>`);
-    } else if (line.trim() === '') {
-      out.push('<div><br></div>');
-    } else {
-      out.push(`<div>${inline(line)}</div>`);
-    }
-  });
-
-  flush();
-  return out.join('');
-};
-
-const sanitizeHtml = (html) => {
-  if (typeof document === 'undefined') return escapeHtml(html);
-  const parser = new DOMParser();
-  const doc = parser.parseFromString(String(html ?? ''), 'text/html');
-  const allowedTags = new Set(['DIV','P','BR','STRONG','B','EM','I','U','S','DEL','CODE','UL','OL','LI','BLOCKQUOTE','A']);
-  const allowedAttrs = {
-    A: new Set(['href','target','rel'])
-  };
-
-  const walk = (node) => {
-    [...node.children].forEach(child => {
-      if (!allowedTags.has(child.tagName)) {
-        const parent = child.parentNode;
-        while (child.firstChild) parent.insertBefore(child.firstChild, child);
-        parent.removeChild(child);
-        return;
-      }
-
-      [...child.attributes].forEach(attr => {
-        const keep = allowedAttrs[child.tagName]?.has(attr.name);
-        if (!keep) child.removeAttribute(attr.name);
-      });
-
-      if (child.tagName === 'A') {
-        const href = child.getAttribute('href') || '';
-        if (!/^https?:\/\//i.test(href)) child.removeAttribute('href');
-        child.setAttribute('target', '_blank');
-        child.setAttribute('rel', 'noopener noreferrer');
-      }
-
-      walk(child);
-    });
-  };
-
-  walk(doc.body);
-  return doc.body.innerHTML;
-};
-
-const renderFormattedText = (text) => {
-  if (typeof text !== 'string') return null;
-  const hasRichHtml = /<(strong|b|em|i|u|s|del|code|ul|ol|li|blockquote|a|br|div|p)\b/i.test(text);
-
-  if (hasRichHtml) {
-    return (
-      <div
-        className="break-words leading-relaxed [&_a]:text-violet-600 [&_a]:font-semibold [&_a]:hover:underline [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:bg-zinc-100 [&_code]:rounded [&_code]:font-mono [&_ul]:list-disc [&_ul]:ml-5 [&_ol]:list-decimal [&_ol]:ml-5 [&_blockquote]:border-l-2 [&_blockquote]:border-violet-300 [&_blockquote]:pl-3 [&_blockquote]:text-zinc-500 [&_blockquote]:italic"
-        dangerouslySetInnerHTML={{ __html: sanitizeHtml(text) }}
-      />
-    );
-  }
-
-  const html = markdownToHtml(text);
-  return (
-    <div
-      className="break-words leading-relaxed [&_a]:text-violet-600 [&_a]:font-semibold [&_a]:hover:underline [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:bg-zinc-100 [&_code]:rounded [&_code]:font-mono [&_ul]:list-disc [&_ul]:ml-5 [&_ol]:list-decimal [&_ol]:ml-5 [&_blockquote]:border-l-2 [&_blockquote]:border-violet-300 [&_blockquote]:pl-3 [&_blockquote]:text-zinc-500 [&_blockquote]:italic"
-      dangerouslySetInnerHTML={{ __html: sanitizeHtml(html) }}
-    />
-  );
-};
-
-function RichTextComposer({
-  placeholder,
-  onSubmit,
-  submitOnEnter = false,
-  submitLabel = 'Post',
-  cancelLabel = null,
-  onCancel = null,
-  autoFocus = false,
-  accent = 'zinc',
-  compact = false,
-  initialValue = '',
-}) {
-  const [html, setHtml] = useState(() => {
-    const initial = initialValue || '';
-    return /<(strong|b|em|i|u|s|del|code|ul|ol|li|blockquote|a|br|div|p)\b/i.test(initial)
-      ? initial
-      : markdownToHtml(initial);
-  });
-  const [isFocused, setIsFocused] = useState(false);
-  const editorRef = useRef(null);
-  const initializedRef = useRef(false);
-
-  useEffect(() => {
-    const initial = initialValue || '';
-    const nextHtml = /<(strong|b|em|i|u|s|del|code|ul|ol|li|blockquote|a|br|div|p)\b/i.test(initial)
-      ? sanitizeHtml(initial)
-      : markdownToHtml(initial);
-    setHtml(nextHtml);
-    if (editorRef.current && editorRef.current.innerHTML !== nextHtml) {
-      editorRef.current.innerHTML = nextHtml;
-    }
-    initializedRef.current = true;
-  }, [initialValue]);
-
-  useEffect(() => {
-    if (autoFocus && editorRef.current) {
-      const frame = requestAnimationFrame(() => {
-        editorRef.current?.focus();
-        setIsFocused(true);
-      });
-      return () => cancelAnimationFrame(frame);
-    }
-  }, [autoFocus]);
-
-  const focusEditor = () => editorRef.current?.focus();
-
-  const applyCommand = (command, value = null) => {
-    focusEditor();
-    try {
-      document.execCommand(command, false, value);
-      setHtml(editorRef.current?.innerHTML || '');
-    } catch (err) {
-      console.warn('Formatting command failed:', command, err);
-    }
-  };
-
-  const insertLink = () => {
-    focusEditor();
-    const url = window.prompt('Enter URL');
-    if (!url) return;
-    const safeUrl = /^https?:\/\//i.test(url) ? url : `https://${url}`;
-    try {
-      document.execCommand('createLink', false, safeUrl);
-      setHtml(editorRef.current?.innerHTML || '');
-    } catch (err) {
-      console.warn('Link insertion failed:', err);
-    }
-  };
-
-  const handleInput = (e) => {
-    setHtml(e.currentTarget.innerHTML);
-  };
-
-  const handleKeyDown = (e) => {
-    // Chat can use Enter to send and Shift+Enter for a new paragraph.
-    const mod = e.metaKey || e.ctrlKey;
-    if (submitOnEnter && e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      submit(e);
-      return;
-    }
-
-    // Cmd/Ctrl+Enter is also a convenient explicit send shortcut.
-    if (submitOnEnter && e.key === 'Enter' && mod) {
-      e.preventDefault();
-      submit(e);
-      return;
-    }
-
-    // Common rich-text shortcuts.
-    if (mod && e.key.toLowerCase() === 'b') {
-      e.preventDefault();
-      applyCommand('bold');
-    } else if (mod && e.key.toLowerCase() === 'i') {
-      e.preventDefault();
-      applyCommand('italic');
-    } else if (mod && e.key.toLowerCase() === 'u') {
-      e.preventDefault();
-      applyCommand('underline');
-    }
-  };
-
-  const handlePaste = (e) => {
-    // Keep clipboard text only; this avoids importing arbitrary HTML into the editor.
-    const text = e.clipboardData?.getData('text/plain');
-    if (typeof text === 'string' && text.length > 0) {
-      e.preventDefault();
-      document.execCommand('insertText', false, text);
-      setHtml(editorRef.current?.innerHTML || '');
-    }
-  };
-
-  const submit = (e) => {
-    e.preventDefault();
-    const currentHtml = editorRef.current?.innerHTML || '';
-    const plainText = (editorRef.current?.innerText || '').trim();
-    if (!plainText) return;
-    onSubmit(sanitizeHtml(currentHtml));
-    if (editorRef.current) editorRef.current.innerHTML = '';
-    setHtml('');
-  };
-
-  const buttonClass = 'min-w-8 px-2 py-1.5 rounded-lg border border-zinc-200 bg-white text-zinc-600 hover:bg-violet-50 hover:text-violet-700 hover:border-violet-200 text-[11px] font-black transition-colors';
-  const plainText = (editorRef.current?.innerText || '').trim();
-  const editorHeightClass = compact ? 'min-h-14' : 'min-h-20';
-  const submitButtonClass = `px-4 py-2 ${accent === 'violet' ? 'bg-violet-600 hover:bg-violet-700' : 'bg-zinc-900 hover:bg-zinc-800'} text-white rounded-xl text-xs font-bold shadow-sm disabled:opacity-40 disabled:cursor-not-allowed transition-colors`;
-  const borderClass = accent === 'violet'
-    ? 'border-violet-200 focus-within:border-violet-500 focus-within:ring-violet-500/20'
-    : 'border-zinc-200 focus-within:border-violet-500 focus-within:ring-violet-500/20';
-
-  return (
-    <form onSubmit={submit} className="w-full">
-      <div className={`rounded-2xl border bg-white focus-within:ring-2 ${borderClass} shadow-sm overflow-hidden`}>
-        {isFocused && (
-          <div className="flex flex-wrap items-center gap-1 px-2 py-2 bg-zinc-50 border-b border-zinc-100">
-            <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400 mr-1">Format</span>
-            <button type="button" className={`${buttonClass} font-black`} onMouseDown={e => e.preventDefault()} onClick={() => applyCommand('bold')} title="Bold">B</button>
-            <button type="button" className={`${buttonClass} italic`} onMouseDown={e => e.preventDefault()} onClick={() => applyCommand('italic')} title="Italic">I</button>
-            <button type="button" className={`${buttonClass} underline`} onMouseDown={e => e.preventDefault()} onClick={() => applyCommand('underline')} title="Underline">U</button>
-            <button type="button" className={`${buttonClass} line-through`} onMouseDown={e => e.preventDefault()} onClick={() => applyCommand('strikeThrough')} title="Strikethrough">S</button>
-            <button type="button" className={`${buttonClass} font-mono`} onMouseDown={e => e.preventDefault()} onClick={() => applyCommand('formatBlock', 'pre')} title="Code block">&lt;/&gt;</button>
-            <button type="button" className={buttonClass} onMouseDown={e => e.preventDefault()} onClick={() => applyCommand('insertUnorderedList')} title="Bulleted list">•</button>
-            <button type="button" className={buttonClass} onMouseDown={e => e.preventDefault()} onClick={() => applyCommand('insertOrderedList')} title="Numbered list">1.</button>
-            <button type="button" className={buttonClass} onMouseDown={e => e.preventDefault()} onClick={() => applyCommand('formatBlock', 'blockquote')} title="Quote">❝</button>
-            <button type="button" className={buttonClass} onMouseDown={e => e.preventDefault()} onClick={insertLink} title="Insert link">🔗</button>
-          </div>
-        )}
-
-        <div
-          ref={editorRef}
-          contentEditable
-          suppressContentEditableWarning
-          role="textbox"
-          aria-multiline="true"
-          data-placeholder={placeholder}
-          onInput={handleInput}
-          onFocus={() => setIsFocused(true)}
-          onBlur={() => setIsFocused(false)}
-          onKeyDown={handleKeyDown}
-          onPaste={handlePaste}
-          className={`w-full ${editorHeightClass} resize-y overflow-y-auto bg-transparent px-3.5 py-3 text-sm outline-none font-medium text-zinc-800 empty:before:content-[attr(data-placeholder)] empty:before:text-zinc-400 [&_a]:text-violet-600 [&_a]:font-semibold [&_a]:hover:underline [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:bg-zinc-100 [&_code]:rounded [&_code]:font-mono [&_ul]:list-disc [&_ul]:ml-5 [&_ol]:list-decimal [&_ol]:ml-5 [&_blockquote]:border-l-2 [&_blockquote]:border-violet-300 [&_blockquote]:pl-3 [&_blockquote]:text-zinc-500 [&_blockquote]:italic`}
-        />
-      </div>
-
-      <div className="flex justify-end gap-2 mt-2">
-        {cancelLabel && onCancel && (
-          <button type="button" onClick={onCancel} className="px-3.5 py-2 bg-white text-zinc-600 border border-zinc-200 rounded-xl hover:bg-zinc-50 text-xs font-bold transition-colors">
-            {cancelLabel}
-          </button>
-        )}
-        <button type="submit" disabled={!plainText} className={submitButtonClass}>
-          {submitLabel}
-        </button>
-      </div>
-    </form>
-  );
-}
-
-const getRecentComments = (comments, count = 2) =>
-  [...(comments || [])]
-    .sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0))
-    .slice(0, count);
-
 const renderReactions = (reactions, onToggle, isMe) => {
   if (!reactions) return null;
   const counts = {};
@@ -392,10 +79,8 @@ export default function App() {
   const [editingTask, setEditingTask] = useState(null);
   const [alertConfig, setAlertConfig] = useState(null);
   const [undoAction, setUndoAction] = useState(null); // Global Undo State
-  const [expandedComments, setExpandedComments] = useState({});
-  const [showOnlinePanel, setShowOnlinePanel] = useState(false);
-  const [activityCounts, setActivityCounts] = useState({ chat: 0, comments: 0 });
-  const activityInitializedRef = useRef(false);
+  const [onlineUsers, setOnlineUsers] = useState({});
+  const [showOnlinePopover, setShowOnlinePopover] = useState(false);
 
   // Progress Update State
   const [localSlider, setLocalSlider] = useState({});
@@ -443,145 +128,6 @@ export default function App() {
     return unsub;
   }, []);
 
-  // Global app presence: this is independent of the Chat panel.
-  useEffect(() => {
-    if (!userRole.username || userRole.role === 'guest') {
-      setOnlineUsers({});
-      return;
-    }
-
-    const presenceRef = doc(db, 'artifacts', appId, 'public', 'data', 'presence', userRole.username);
-    const writePresence = async (online = true) => {
-      try {
-        await setDoc(presenceRef, {
-          online,
-          lastSeen: Date.now(),
-          role: userRole.role
-        }, { merge: true });
-      } catch (err) {
-        console.warn('Presence update failed:', err);
-      }
-    };
-
-    writePresence(true);
-    const heartbeat = setInterval(() => writePresence(true), 30000);
-
-    const handleVisibility = () => {
-      if (document.visibilityState === 'visible') writePresence(true);
-    };
-
-    const handleUnload = () => {
-      // Best-effort. The heartbeat + stale timeout below is the real safeguard.
-      writePresence(false);
-    };
-
-    document.addEventListener('visibilitychange', handleVisibility);
-    window.addEventListener('beforeunload', handleUnload);
-
-    const unsubPresence = onSnapshot(
-      collection(db, 'artifacts', appId, 'public', 'data', 'presence'),
-      (snap) => {
-        const now = Date.now();
-        const current = {};
-        snap.forEach(d => {
-          const data = d.data() || {};
-          const lastSeen = typeof data.lastSeen === 'number' ? data.lastSeen : 0;
-          if (data.online && now - lastSeen < 90000) {
-            current[d.id] = {
-              role: data.role || 'staff',
-              lastSeen
-            };
-          }
-        });
-        setOnlineUsers(current);
-      },
-      (err) => console.warn('Presence sync issue:', err)
-    );
-
-    return () => {
-      clearInterval(heartbeat);
-      document.removeEventListener('visibilitychange', handleVisibility);
-      window.removeEventListener('beforeunload', handleUnload);
-      unsubPresence();
-      writePresence(false);
-    };
-  }, [userRole.username, userRole.role]);
-
-  // Establish a baseline so existing activity does not suddenly appear as new.
-  useEffect(() => {
-    if (!userRole.username || userRole.role === 'guest') {
-      activityInitializedRef.current = false;
-      setActivityCounts({ chat: 0, comments: 0 });
-      return;
-    }
-
-    const key = `ffm_activity_read_${userRole.username}`;
-    if (!localStorage.getItem(key)) localStorage.setItem(key, String(Date.now()));
-    activityInitializedRef.current = true;
-    setActivityCounts({ chat: 0, comments: 0 });
-  }, [userRole.username, userRole.role]);
-
-  // Global chat activity listener for the browser-tab/header notification.
-  useEffect(() => {
-    if (!userRole.username || userRole.role === 'guest' || !activityInitializedRef.current) return;
-
-    const unsub = onSnapshot(
-      collection(db, 'artifacts', appId, 'public', 'data', 'chatMessages'),
-      (snap) => {
-        const readAt = Number(localStorage.getItem(`ffm_activity_read_${userRole.username}`) || 0);
-        let count = 0;
-        snap.forEach(d => {
-          const m = d.data() || {};
-          if (m.author !== userRole.username && Number(m.timestamp || 0) > readAt) count++;
-        });
-        setActivityCounts(prev => ({ ...prev, chat: count }));
-      },
-      (err) => console.warn('Chat activity notification sync issue:', err)
-    );
-
-    return unsub;
-  }, [userRole.username, userRole.role]);
-
-  const countNewCommentActivity = (items, readAt, username) => {
-    let count = 0;
-    const walk = (arr) => {
-      (arr || []).forEach(c => {
-        const timestamp = Date.parse(c.timestamp || '');
-        if (c.author !== username && Number.isFinite(timestamp) && timestamp > readAt) count++;
-        walk(c.replies);
-      });
-    };
-    items.forEach(task => walk(task.comments));
-    return count;
-  };
-
-  // Tasks already have a global listener; use it to detect new comments/replies.
-  useEffect(() => {
-    if (!userRole.username || userRole.role === 'guest' || !activityInitializedRef.current) return;
-    const readAt = Number(localStorage.getItem(`ffm_activity_read_${userRole.username}`) || 0);
-    setActivityCounts(prev => ({
-      ...prev,
-      comments: countNewCommentActivity(tasks, readAt, userRole.username)
-    }));
-  }, [tasks, userRole.username, userRole.role]);
-
-  const totalActivityUnread = activityCounts.chat + activityCounts.comments;
-
-  // Browser-tab notification. The title is visible even while multitasking in another app/tab.
-  useEffect(() => {
-    const baseTitle = 'Flowers for Mary 2027';
-    document.title = totalActivityUnread > 0
-      ? `(${totalActivityUnread}) ${baseTitle}`
-      : baseTitle;
-  }, [totalActivityUnread]);
-
-  const markActivityRead = () => {
-    if (!userRole.username || userRole.role === 'guest') return;
-    localStorage.setItem(`ffm_activity_read_${userRole.username}`, String(Date.now()));
-    setActivityCounts({ chat: 0, comments: 0 });
-    setShowOnlinePanel(false);
-  };
-
   // INSTANT FETCH: No fbUser gatekeeper! Guests on Share Links get instant access.
   useEffect(() => {
     const unsubTasks = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'tasks'), (snap) => {
@@ -605,6 +151,92 @@ export default function App() {
        return () => clearTimeout(timer);
     }
   }, [undoAction]);
+
+  // Global presence: independent of Chat being open.
+  useEffect(() => {
+    if (!userRole.username) {
+      setOnlineUsers({});
+      return;
+    }
+
+    const presenceRef = doc(db, 'artifacts', appId, 'public', 'data', 'presence', userRole.username);
+
+    const writePresence = async (online) => {
+      try {
+        await setDoc(presenceRef, {
+          online,
+          username: userRole.username,
+          role: userRole.role,
+          lastSeen: serverTimestamp()
+        }, { merge: true });
+      } catch (err) {
+        console.warn('Presence update failed:', err);
+      }
+    };
+
+    writePresence(true);
+
+    const unsubPresence = onSnapshot(
+      collection(db, 'artifacts', appId, 'public', 'data', 'presence'),
+      (snap) => {
+        const now = Date.now();
+        const active = {};
+
+        snap.forEach((d) => {
+          const data = d.data();
+          const lastSeen = data.lastSeen?.toMillis ? data.lastSeen.toMillis() : 0;
+          const isFresh = lastSeen > 0 && (now - lastSeen) < 90000;
+          if (data.online && isFresh) {
+            active[d.id] = {
+              username: data.username || d.id,
+              role: data.role || 'staff',
+              lastSeen: data.lastSeen
+            };
+          }
+        });
+
+        // Keep the current user visible immediately even before the first serverTimestamp returns.
+        if (!active[userRole.username]) {
+          active[userRole.username] = {
+            username: userRole.username,
+            role: userRole.role,
+            lastSeen: null
+          };
+        }
+
+        setOnlineUsers(active);
+      },
+      (err) => console.warn('Presence listener failed:', err)
+    );
+
+    const heartbeat = setInterval(() => writePresence(true), 30000);
+
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') writePresence(true);
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    const handleUnload = () => {
+      // Best-effort only; the 90-second freshness window is the real offline safeguard.
+      try {
+        setDoc(presenceRef, {
+          online: false,
+          username: userRole.username,
+          role: userRole.role,
+          lastSeen: serverTimestamp()
+        }, { merge: true });
+      } catch {}
+    };
+    window.addEventListener('beforeunload', handleUnload);
+
+    return () => {
+      clearInterval(heartbeat);
+      document.removeEventListener('visibilitychange', handleVisibility);
+      window.removeEventListener('beforeunload', handleUnload);
+      writePresence(false);
+      unsubPresence();
+    };
+  }, [userRole.username, userRole.role]);
 
   const showAlert = (title, message, isError = false, onConfirm = null) => {
     setAlertConfig({ title, message, isError, onConfirm });
@@ -915,6 +547,46 @@ export default function App() {
           </p>
         </div>
         
+        {userRole.role !== 'guest' && (
+          <div className="relative">
+            <button
+              onClick={() => setShowOnlinePopover(v => !v)}
+              className="flex items-center gap-2 px-3.5 py-2.5 bg-white border border-zinc-200/80 rounded-2xl hover:bg-zinc-50 hover:border-zinc-300 transition-all shadow-sm font-bold text-sm"
+              title="See who is currently online"
+            >
+              <span className="relative flex items-center justify-center">
+                <Users size={16} className="text-violet-600" />
+                <span className="absolute -right-1.5 -top-1.5 min-w-4 h-4 px-1 rounded-full bg-emerald-500 text-white text-[9px] font-black flex items-center justify-center border-2 border-white">
+                  {Object.keys(onlineUsers).length}
+                </span>
+              </span>
+              <span className="hidden sm:inline">{Object.keys(onlineUsers).length === 1 ? '1 online' : `${Object.keys(onlineUsers).length} online`}</span>
+            </button>
+
+            {showOnlinePopover && (
+              <div className="absolute right-0 top-full mt-2 w-64 bg-white border border-zinc-200 rounded-2xl shadow-xl z-[80] p-3">
+                <div className="flex items-center justify-between px-2 pb-2 mb-2 border-b border-zinc-100">
+                  <span className="text-xs font-black uppercase tracking-widest text-zinc-500">Currently Online</span>
+                  <span className="text-[10px] font-bold text-emerald-600">{Object.keys(onlineUsers).length}</span>
+                </div>
+                <div className="space-y-1.5 max-h-56 overflow-y-auto custom-scrollbar">
+                  {Object.values(onlineUsers)
+                    .sort((a, b) => a.username.localeCompare(b.username))
+                    .map((u) => (
+                      <div key={u.username} className="flex items-center justify-between px-2.5 py-2 rounded-xl bg-zinc-50">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.65)] shrink-0"></span>
+                          <span className="text-sm font-bold text-zinc-800 truncate">{u.username}</span>
+                        </div>
+                        <span className="text-[9px] font-black uppercase tracking-wider text-zinc-400 ml-2">{u.role}</span>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="flex flex-wrap gap-2.5 items-center">
           {userRole.role === 'guest' ? (
             <button onClick={() => setShowLogin(true)} className="flex items-center gap-2 px-6 py-2.5 bg-zinc-900 text-white rounded-2xl hover:bg-zinc-800 hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300 font-bold text-sm">
@@ -951,58 +623,6 @@ export default function App() {
                 </>
               )}
               
-              <div className="relative">
-                <button
-                  onClick={() => setShowOnlinePanel(v => !v)}
-                  className="flex items-center gap-2 px-4 py-2.5 text-zinc-700 bg-white border border-zinc-200/80 rounded-2xl hover:bg-zinc-50 hover:border-zinc-300 transition-all shadow-sm font-bold text-sm"
-                  title="People currently online"
-                >
-                  <span className="relative flex items-center justify-center">
-                    <Users size={16} className="text-emerald-600" />
-                    <span className="absolute -right-1.5 -top-1.5 w-2 h-2 rounded-full bg-emerald-500 ring-2 ring-white"></span>
-                  </span>
-                  {Object.keys(onlineUsers).length} online
-                </button>
-
-                {showOnlinePanel && (
-                  <div className="absolute right-0 top-full mt-2 w-64 bg-white border border-zinc-200 rounded-2xl shadow-xl p-3 z-[80]">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-xs font-black uppercase tracking-widest text-zinc-400">Currently Online</span>
-                      <button onClick={() => setShowOnlinePanel(false)} className="text-zinc-400 hover:text-zinc-700"><X size={14}/></button>
-                    </div>
-                    <div className="space-y-1.5 max-h-48 overflow-y-auto">
-                      {Object.keys(onlineUsers).length === 0 ? (
-                        <div className="text-xs text-zinc-400 py-2">No one else is currently online.</div>
-                      ) : (
-                        Object.entries(onlineUsers).map(([name, info]) => (
-                          <div key={name} className="flex items-center justify-between px-2.5 py-2 rounded-xl bg-zinc-50">
-                            <div className="flex items-center gap-2 min-w-0">
-                              <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0"></span>
-                              <span className="font-bold text-sm text-zinc-800 truncate">{name}</span>
-                              {name === userRole.username && <span className="text-[9px] font-bold text-zinc-400">YOU</span>}
-                            </div>
-                            <span className="text-[9px] font-black uppercase tracking-wider text-zinc-400">{info.role}</span>
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              <button
-                onClick={markActivityRead}
-                className="relative flex items-center justify-center w-11 h-11 text-zinc-700 bg-white border border-zinc-200/80 rounded-2xl hover:bg-zinc-50 hover:border-zinc-300 transition-all shadow-sm"
-                title={totalActivityUnread > 0 ? `${totalActivityUnread} new activity item${totalActivityUnread === 1 ? '' : 's'}` : 'No new activity'}
-              >
-                <Bell size={17} className={totalActivityUnread > 0 ? 'text-violet-600' : 'text-zinc-500'} />
-                {totalActivityUnread > 0 && (
-                  <span className="absolute -top-1.5 -right-1.5 min-w-[20px] h-5 px-1 bg-rose-500 text-white text-[10px] font-black rounded-full flex items-center justify-center border-2 border-white animate-in zoom-in">
-                    {totalActivityUnread > 99 ? '99+' : totalActivityUnread}
-                  </span>
-                )}
-              </button>
-
               <button onClick={generatePDF} className="flex items-center gap-2 px-4 py-2.5 text-zinc-700 bg-white border border-zinc-200/80 rounded-2xl hover:bg-zinc-50 hover:border-zinc-300 transition-all shadow-sm font-bold text-sm">
                 <FileText size={16} className="text-zinc-500" /> Report
               </button>
@@ -1092,8 +712,6 @@ export default function App() {
                         {sgTasks.map(task => {
                            const displayProgress = localSlider[task.id] !== undefined ? localSlider[task.id] : (task.progress || 0);
                            const isChanged = localSlider[task.id] !== undefined && localSlider[task.id] !== (task.progress || 0);
-                           const commentsExpanded = !!expandedComments[task.id];
-                           const recentComments = getRecentComments(task.comments || [], 2);
                            
                            return (
                              <div key={task.id} className="task-card p-5 bg-zinc-50 rounded-3xl border border-zinc-200/50 hover:bg-white hover:border-violet-300 hover:shadow-[0_8px_30px_rgb(0,0,0,0.05)] transition-all duration-300 group relative">
@@ -1150,61 +768,27 @@ export default function App() {
                                           <div className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-lg font-bold text-[10px] mb-1.5 border ${upd.to >= upd.from ? 'bg-emerald-50 text-emerald-700 border-emerald-100/50' : 'bg-rose-50 text-rose-700 border-rose-100/50'}`}>
                                             {upd.from}% <ArrowLeft size={10} className={`rotate-180 ${upd.to < upd.from ? 'text-rose-400' : ''}`}/> {upd.to}%
                                           </div>
-                                          <div className="text-zinc-600 break-words leading-relaxed font-medium">{renderFormattedText(upd.text)}</div>
+                                          <div className="text-zinc-600 break-words leading-relaxed font-medium">{urlify(upd.text)}</div>
                                         </div>
                                       ))}
                                       {task.updates?.length === 0 && <div className="text-xs text-zinc-400 italic">No progress updates yet.</div>}
                                     </div>
                                   </details>
 
-                                  <div className="mt-5 pt-4 border-t border-zinc-200/60">
-                                    <div className="flex items-center justify-between gap-3">
-                                      <div className={`text-xs flex items-center gap-2 ${task.comments?.length ? 'font-bold text-violet-600' : 'font-semibold text-zinc-400'}`}>
-                                        <MessageSquare size={14}/> {task.comments?.length || 0} Comments
-                                      </div>
-                                      {task.comments?.length > 2 && (
-                                        <button
-                                          type="button"
-                                          onClick={() => setExpandedComments(prev => ({ ...prev, [task.id]: !prev[task.id] }))}
-                                          className="text-[10px] font-black uppercase tracking-wider px-2.5 py-1.5 rounded-lg border border-zinc-200 bg-white text-violet-600 hover:bg-violet-50 hover:border-violet-200 transition-colors"
-                                        >
-                                          {commentsExpanded ? 'Collapse' : 'Show All'}
-                                        </button>
-                                      )}
-                                    </div>
-
-                                    <div className="mt-3 space-y-3">
-                                      {commentsExpanded ? (
-                                        <CommentThread comments={task.comments || []} taskId={task.id} userRole={userRole} db={db} appId={appId} tasks={tasks} showAlert={showAlert} setUndoAction={setUndoAction} />
-                                      ) : (
-                                        <div className="space-y-2">
-                                          {recentComments.map(c => (
-                                            <div key={c.id} className="bg-zinc-50 border border-zinc-200/60 rounded-xl px-3 py-2.5 text-xs">
-                                              <div className="flex items-center gap-2 mb-1">
-                                                <span className="font-bold text-zinc-800">{c.author}</span>
-                                                <span className="text-zinc-400 font-medium text-[10px]">{c.timestamp ? new Date(c.timestamp).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : ''}</span>
-                                              </div>
-                                              <div className="text-zinc-600 line-clamp-2 leading-relaxed whitespace-pre-wrap">{renderFormattedText(c.text)}</div>
-                                            </div>
-                                          ))}
-                                          {task.comments?.length > 2 && (
-                                            <div className="text-[10px] text-zinc-400 italic">Showing the 2 most recent comments.</div>
-                                          )}
-                                        </div>
-                                      )}
-
+                                  <details className="group/details" open={task.comments?.length > 0}>
+                                    <summary className={`text-xs cursor-pointer flex items-center gap-2 transition-colors select-none ${task.comments?.length > 0 ? 'font-bold text-violet-600' : 'font-semibold text-zinc-400 hover:text-zinc-600'}`}>
+                                      <MessageSquare size={14}/> {task.comments?.length || 0} Comments
+                                    </summary>
+                                    <div className="mt-4 space-y-3">
+                                      <CommentThread comments={task.comments || []} taskId={task.id} userRole={userRole} db={db} appId={appId} tasks={tasks} showAlert={showAlert} setUndoAction={setUndoAction} />
                                       {userRole.role !== 'guest' && (
-                                        <div className="mt-3">
-                                          <RichTextComposer
-                                            placeholder="Write a comment..."
-                                            submitLabel="Post"
-                                            compact
-                                            onSubmit={(text) => addComment(task.id, text)}
-                                          />
-                                        </div>
+                                        <form onSubmit={(e) => { e.preventDefault(); addComment(task.id, e.target.elements.comment.value); e.target.reset(); }} className="flex gap-2 mt-3 relative">
+                                          <input name="comment" type="text" placeholder="Write a comment..." className="flex-1 text-sm p-3.5 pr-20 bg-white border border-zinc-200/80 rounded-2xl focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 transition-all shadow-sm font-medium" required/>
+                                          <button type="submit" className="absolute right-2 top-2 bottom-2 px-4 bg-zinc-900 text-white text-xs font-bold rounded-xl hover:bg-zinc-800 transition-all shadow-sm">Post</button>
+                                        </form>
                                       )}
                                     </div>
-                                  </div>
+                                  </details>
 
                                 </div>
                              </div>
@@ -1496,43 +1080,31 @@ function CommentThread({ comments, taskId, userRole, db, appId, tasks, showAlert
               </div>
               
               {editingCommentId === c.id ? (
-                <div className="mt-3">
-                  <RichTextComposer
-                    placeholder="Edit comment..."
-                    submitLabel="Save"
-                    cancelLabel="Cancel"
-                    onCancel={() => setEditingCommentId(null)}
-                    accent="violet"
-                    autoFocus
-                    initialValue={c.text || ''}
-                    onSubmit={(text) => { saveEdit(c.id, text); }}
-                  />
-                </div>
+                <form onSubmit={e => { e.preventDefault(); saveEdit(c.id, e.target.elements.txt.value); }} className="mt-3 flex gap-2">
+                  <input name="txt" defaultValue={c.text} autoFocus className="flex-1 p-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm outline-none focus:border-violet-500 font-semibold"/>
+                  <button type="submit" className="px-3 bg-zinc-900 text-white rounded-xl font-bold hover:bg-zinc-800"><Check size={14}/></button>
+                  <button type="button" onClick={() => setEditingCommentId(null)} className="px-3 bg-zinc-100 text-zinc-600 rounded-xl font-bold hover:bg-zinc-200"><X size={14}/></button>
+                </form>
               ) : (
-                <div className="text-zinc-600 mt-1.5 break-words leading-relaxed font-medium whitespace-pre-wrap">{renderFormattedText(c.text)}</div>
+                <div className="text-zinc-600 mt-1.5 break-words leading-relaxed font-medium whitespace-pre-wrap">{urlify(c.text)}</div>
               )}
 
               {renderReactions(c.reactions, (e) => toggleReaction(c.id, e))}
             </div>
             
+            {replyingToId === c.id && (
+              <form onSubmit={e => { e.preventDefault(); addReply(c.id, e.target.elements.replyTxt.value); }} className="mt-2.5 flex gap-2 ml-5 pl-4 border-l-2 border-violet-300 relative">
+                  <input name="replyTxt" placeholder="Write a reply..." autoFocus className="flex-1 p-3 pr-20 border border-violet-200 rounded-2xl text-sm outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 bg-violet-50/40 shadow-sm transition-all font-medium"/>
+                  <div className="absolute right-1.5 top-1.5 bottom-1.5 flex gap-1">
+                     <button type="submit" className="px-3.5 bg-violet-600 text-white rounded-xl text-xs font-bold hover:bg-violet-700 shadow-sm">Reply</button>
+                     <button type="button" onClick={() => setReplyingToId(null)} className="px-2.5 bg-white text-zinc-500 border border-zinc-200 rounded-xl hover:bg-zinc-50"><X size={14}/></button>
+                  </div>
+              </form>
+            )}
+
             {c.replies && c.replies.length > 0 && (
               <div className="mt-3">
                  <CommentThread comments={c.replies} taskId={taskId} userRole={userRole} db={db} appId={appId} tasks={tasks} showAlert={showAlert} setUndoAction={setUndoAction} parentIds={[...parentIds, c.id]} />
-              </div>
-            )}
-
-            {replyingToId === c.id && (
-              <div className="mt-3 ml-5 pl-4 border-l-2 border-violet-300">
-                <RichTextComposer
-                  placeholder="Write a reply..."
-                  submitLabel="Reply"
-                  cancelLabel="Cancel"
-                  onCancel={() => setReplyingToId(null)}
-                  accent="violet"
-                  compact
-                  autoFocus
-                  onSubmit={(text) => addReply(c.id, text)}
-                />
               </div>
             )}
           </div>
@@ -1632,13 +1204,12 @@ function ChatPanel({ db, appId, userRole, team, showAlert, onlineUsers }) {
   const [channels, setChannels] = useState([]);
   const [activeChannel, setActiveChannel] = useState(null);
   const [messages, setMessages] = useState([]);
+  const [newMessage, setNewMessage] = useState('');
   const [showCreate, setShowCreate] = useState(false);
   const [selectedUsers, setSelectedUsers] = useState([]);
   const [userSearch, setUserSearch] = useState('');
   const [unreadCounts, setUnreadCounts] = useState({});
-  const [onlineUsers, setOnlineUsers] = useState({});
   const [reactionPickerId, setReactionPickerId] = useState(null);
-  const [replyingToMessageId, setReplyingToMessageId] = useState(null);
   const messagesEndRef = useRef(null);
 
   const audioCtxRef = useRef(null);
@@ -1724,27 +1295,17 @@ function ChatPanel({ db, appId, userRole, team, showAlert, onlineUsers }) {
     if (!isOpen && activeChannel) markRead(activeChannel.id);
   };
 
-  const sendMessage = async (text) => {
-    if (!text.trim() || !activeChannel) return;
-
-    const repliedMessage = replyingToMessageId
-      ? messages.find(m => m.id === replyingToMessageId)
-      : null;
-
+  const sendMessage = async (e) => {
+    e.preventDefault();
+    if (!newMessage.trim() || !activeChannel) return;
     await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'chatMessages'), {
       channelId: activeChannel.id,
       author: userRole.username,
-      text,
+      text: newMessage,
       timestamp: Date.now(),
-      reactions: {},
-      replyTo: repliedMessage ? {
-        id: repliedMessage.id,
-        author: repliedMessage.author,
-        text: repliedMessage.text
-      } : null
+      reactions: {}
     });
-
-    setReplyingToMessageId(null);
+    setNewMessage('');
     markRead(activeChannel.id);
   };
 
@@ -1902,77 +1463,42 @@ function ChatPanel({ db, appId, userRole, team, showAlert, onlineUsers }) {
                         return (
                            <div key={m.id} className={`flex flex-col ${isMe ? 'items-end' : 'items-start'} group/msg relative mb-2`}>
                               {showAuthor && !isMe && <span className="text-[10px] font-bold text-zinc-400 mb-1 px-1 ml-1">{m.author}</span>}
-                              {m.replyTo && (
-                                <div className={`mb-1.5 max-w-[85%] ${isMe ? 'self-end' : 'self-start'}`}>
-                                  <div className="border-l-2 border-violet-300 bg-violet-50/60 rounded-r-xl px-3 py-2 text-[11px] text-zinc-500">
-                                    <div className="font-bold text-violet-700 mb-0.5">Replying to {m.replyTo.author}</div>
-                                    <div className="truncate">{m.replyTo.text}</div>
-                                  </div>
-                                </div>
-                              )}
-
                               <div className="relative flex items-center gap-2">
                                  {!isMe && (
-                                     <div className={`flex items-center gap-1 opacity-0 group-hover/msg:opacity-100 transition-opacity ${reactionPickerId === m.id ? 'opacity-100' : ''}`}>
-                                         <button onClick={() => setReplyingToMessageId(m.id)} className="p-1 text-zinc-400 hover:text-blue-600 transition-colors" title="Reply"><Reply size={14}/></button>
-                                         <button onClick={() => setReactionPickerId(reactionPickerId === m.id ? null : m.id)} className="p-1 text-zinc-400 hover:text-amber-500 transition-colors" title="React"><Smile size={14}/></button>
+                                     <div className={`opacity-0 group-hover/msg:opacity-100 transition-opacity ${reactionPickerId === m.id ? 'opacity-100' : ''}`}>
+                                         <button onClick={() => setReactionPickerId(reactionPickerId === m.id ? null : m.id)} className="p-1 text-zinc-400 hover:text-amber-500 transition-colors"><Smile size={14}/></button>
                                      </div>
                                  )}
 
                                  <div className={`px-4 py-3 rounded-2xl max-w-[85%] text-sm break-words shadow-sm font-medium ${isMe ? 'bg-zinc-900 text-white rounded-br-sm' : 'bg-white border border-zinc-200/80 text-zinc-800 rounded-bl-sm'}`}>
-                                    {renderFormattedText(m.text)}
+                                    {urlify(m.text)}
                                  </div>
 
                                  {isMe && (
-                                     <div className={`flex items-center gap-1 opacity-0 group-hover/msg:opacity-100 transition-opacity ${reactionPickerId === m.id ? 'opacity-100' : ''}`}>
-                                         <button onClick={() => setReplyingToMessageId(m.id)} className="p-1 text-zinc-400 hover:text-blue-600 transition-colors" title="Reply"><Reply size={14}/></button>
-                                         <button onClick={() => setReactionPickerId(reactionPickerId === m.id ? null : m.id)} className="p-1 text-zinc-400 hover:text-amber-500 transition-colors" title="React"><Smile size={14}/></button>
+                                     <div className={`opacity-0 group-hover/msg:opacity-100 transition-opacity ${reactionPickerId === m.id ? 'opacity-100' : ''}`}>
+                                         <button onClick={() => setReactionPickerId(reactionPickerId === m.id ? null : m.id)} className="p-1 text-zinc-400 hover:text-amber-500 transition-colors"><Smile size={14}/></button>
                                      </div>
                                  )}
 
                                  {reactionPickerId === m.id && (
-                                     <div className="absolute left-1/2 -translate-x-1/2 top-full mt-1 bg-white shadow-xl border border-zinc-200 rounded-full px-2 py-1 flex gap-1 z-50 animate-in zoom-in duration-200">
+                                     <div className={`absolute ${isMe ? 'right-full mr-2' : 'left-full ml-2'} top-0 bg-white shadow-xl border border-zinc-200 rounded-full px-2 py-1 flex gap-1 z-50 animate-in zoom-in duration-200`}>
                                          {['👍', '❤️', '😂', '😲', '👎'].map(e => (
                                              <button key={e} onClick={() => { toggleChatReaction(m.id, e, m.reactions); setReactionPickerId(null); }} className="hover:scale-125 transition-transform text-base">{e}</button>
                                          ))}
                                      </div>
                                  )}
                               </div>
-
                               {renderReactions(m.reactions, (e) => toggleChatReaction(m.id, e, m.reactions), isMe)}
-
-                              {replyingToMessageId === m.id && (
-                                <div className={`w-full mt-2 ${isMe ? 'pr-8' : 'pl-8'}`}>
-                                  <div className="border-l-2 border-violet-300 pl-3">
-                                    <RichTextComposer
-                                      placeholder={`Reply to ${m.author}...`}
-                                      submitLabel="Reply"
-                                      cancelLabel="Cancel"
-                                      onCancel={() => setReplyingToMessageId(null)}
-                                      accent="violet"
-                                      compact
-                                      autoFocus
-                                      submitOnEnter
-                                      onSubmit={(text) => sendMessage(text)}
-                                    />
-                                  </div>
-                                </div>
-                              )}
                            </div>
                         )
                      })}
                      <div ref={messagesEndRef} className="h-2" />
                   </div>
                   
-                  <div className="p-4 bg-white border-t border-zinc-100 shrink-0 pb-[max(env(safe-area-inset-bottom),16px)] sm:pb-4 rounded-b-[2rem]">
-                    {/* Chat: Enter sends; Shift+Enter creates a new paragraph. */}
-                    <RichTextComposer
-                      placeholder="Type a message..."
-                      submitLabel="Send"
-                      submitOnEnter
-                      onSubmit={sendMessage}
-                    />
-                  </div>
+                  <form onSubmit={sendMessage} className="p-4 bg-white border-t border-zinc-100 flex gap-2.5 shrink-0 pb-[max(env(safe-area-inset-bottom),16px)] sm:pb-4 rounded-b-[2rem]">
+                     <input type="text" value={newMessage} onChange={e => setNewMessage(e.target.value)} placeholder="Type a message..." className="flex-1 px-4 py-3.5 bg-zinc-50 border border-zinc-200 rounded-2xl text-sm outline-none focus:bg-white focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 transition-all font-medium" />
+                     <button type="submit" disabled={!newMessage.trim()} className="w-12 h-12 bg-violet-600 text-white rounded-2xl flex items-center justify-center disabled:opacity-50 disabled:bg-zinc-300 shrink-0 hover:bg-violet-700 hover:shadow-lg hover:shadow-violet-600/35 transition-all duration-200"><Send size={18} className="ml-0.5"/></button>
+                  </form>
                </div>
             )}
           </div>
