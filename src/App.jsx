@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, onAuthStateChanged, signInAnonymously, signInWithCustomToken } from 'firebase/auth';
 import { getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc, updateDoc, getDoc, query, orderBy, addDoc, serverTimestamp } from 'firebase/firestore';
-import { Calendar as CalendarIcon, Clock, Users, User, LogIn, LogOut, Plus, Download, Upload, FileText, MessageSquare, Trash2, Edit2, AlertCircle, Key, Eye, EyeOff, X, Check, ArrowLeft, Send, Reply, TrendingUp, Smile } from 'lucide-react';
+import { Calendar as CalendarIcon, Clock, Users, User, LogIn, LogOut, Plus, Download, Upload, FileText, MessageSquare, Trash2, Edit2, AlertCircle, Key, Eye, EyeOff, X, Check, ArrowLeft, Send, Reply, TrendingUp, Smile, Bell } from 'lucide-react';
 
 const firebaseConfig = {
   apiKey: "AIzaSyAKYltJBn7OkCqMjO2NY_c8edWUgPJlgZY",
@@ -393,6 +393,9 @@ export default function App() {
   const [alertConfig, setAlertConfig] = useState(null);
   const [undoAction, setUndoAction] = useState(null); // Global Undo State
   const [expandedComments, setExpandedComments] = useState({});
+  const [showOnlinePanel, setShowOnlinePanel] = useState(false);
+  const [activityCounts, setActivityCounts] = useState({ chat: 0, comments: 0 });
+  const activityInitializedRef = useRef(false);
 
   // Progress Update State
   const [localSlider, setLocalSlider] = useState({});
@@ -439,6 +442,145 @@ export default function App() {
     const unsub = onAuthStateChanged(auth, setFbUser);
     return unsub;
   }, []);
+
+  // Global app presence: this is independent of the Chat panel.
+  useEffect(() => {
+    if (!userRole.username || userRole.role === 'guest') {
+      setOnlineUsers({});
+      return;
+    }
+
+    const presenceRef = doc(db, 'artifacts', appId, 'public', 'data', 'presence', userRole.username);
+    const writePresence = async (online = true) => {
+      try {
+        await setDoc(presenceRef, {
+          online,
+          lastSeen: Date.now(),
+          role: userRole.role
+        }, { merge: true });
+      } catch (err) {
+        console.warn('Presence update failed:', err);
+      }
+    };
+
+    writePresence(true);
+    const heartbeat = setInterval(() => writePresence(true), 30000);
+
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') writePresence(true);
+    };
+
+    const handleUnload = () => {
+      // Best-effort. The heartbeat + stale timeout below is the real safeguard.
+      writePresence(false);
+    };
+
+    document.addEventListener('visibilitychange', handleVisibility);
+    window.addEventListener('beforeunload', handleUnload);
+
+    const unsubPresence = onSnapshot(
+      collection(db, 'artifacts', appId, 'public', 'data', 'presence'),
+      (snap) => {
+        const now = Date.now();
+        const current = {};
+        snap.forEach(d => {
+          const data = d.data() || {};
+          const lastSeen = typeof data.lastSeen === 'number' ? data.lastSeen : 0;
+          if (data.online && now - lastSeen < 90000) {
+            current[d.id] = {
+              role: data.role || 'staff',
+              lastSeen
+            };
+          }
+        });
+        setOnlineUsers(current);
+      },
+      (err) => console.warn('Presence sync issue:', err)
+    );
+
+    return () => {
+      clearInterval(heartbeat);
+      document.removeEventListener('visibilitychange', handleVisibility);
+      window.removeEventListener('beforeunload', handleUnload);
+      unsubPresence();
+      writePresence(false);
+    };
+  }, [userRole.username, userRole.role]);
+
+  // Establish a baseline so existing activity does not suddenly appear as new.
+  useEffect(() => {
+    if (!userRole.username || userRole.role === 'guest') {
+      activityInitializedRef.current = false;
+      setActivityCounts({ chat: 0, comments: 0 });
+      return;
+    }
+
+    const key = `ffm_activity_read_${userRole.username}`;
+    if (!localStorage.getItem(key)) localStorage.setItem(key, String(Date.now()));
+    activityInitializedRef.current = true;
+    setActivityCounts({ chat: 0, comments: 0 });
+  }, [userRole.username, userRole.role]);
+
+  // Global chat activity listener for the browser-tab/header notification.
+  useEffect(() => {
+    if (!userRole.username || userRole.role === 'guest' || !activityInitializedRef.current) return;
+
+    const unsub = onSnapshot(
+      collection(db, 'artifacts', appId, 'public', 'data', 'chatMessages'),
+      (snap) => {
+        const readAt = Number(localStorage.getItem(`ffm_activity_read_${userRole.username}`) || 0);
+        let count = 0;
+        snap.forEach(d => {
+          const m = d.data() || {};
+          if (m.author !== userRole.username && Number(m.timestamp || 0) > readAt) count++;
+        });
+        setActivityCounts(prev => ({ ...prev, chat: count }));
+      },
+      (err) => console.warn('Chat activity notification sync issue:', err)
+    );
+
+    return unsub;
+  }, [userRole.username, userRole.role]);
+
+  const countNewCommentActivity = (items, readAt, username) => {
+    let count = 0;
+    const walk = (arr) => {
+      (arr || []).forEach(c => {
+        const timestamp = Date.parse(c.timestamp || '');
+        if (c.author !== username && Number.isFinite(timestamp) && timestamp > readAt) count++;
+        walk(c.replies);
+      });
+    };
+    items.forEach(task => walk(task.comments));
+    return count;
+  };
+
+  // Tasks already have a global listener; use it to detect new comments/replies.
+  useEffect(() => {
+    if (!userRole.username || userRole.role === 'guest' || !activityInitializedRef.current) return;
+    const readAt = Number(localStorage.getItem(`ffm_activity_read_${userRole.username}`) || 0);
+    setActivityCounts(prev => ({
+      ...prev,
+      comments: countNewCommentActivity(tasks, readAt, userRole.username)
+    }));
+  }, [tasks, userRole.username, userRole.role]);
+
+  const totalActivityUnread = activityCounts.chat + activityCounts.comments;
+
+  // Browser-tab notification. The title is visible even while multitasking in another app/tab.
+  useEffect(() => {
+    const baseTitle = 'Flowers for Mary 2027';
+    document.title = totalActivityUnread > 0
+      ? `(${totalActivityUnread}) ${baseTitle}`
+      : baseTitle;
+  }, [totalActivityUnread]);
+
+  const markActivityRead = () => {
+    if (!userRole.username || userRole.role === 'guest') return;
+    localStorage.setItem(`ffm_activity_read_${userRole.username}`, String(Date.now()));
+    setActivityCounts({ chat: 0, comments: 0 });
+    setShowOnlinePanel(false);
+  };
 
   // INSTANT FETCH: No fbUser gatekeeper! Guests on Share Links get instant access.
   useEffect(() => {
@@ -809,6 +951,58 @@ export default function App() {
                 </>
               )}
               
+              <div className="relative">
+                <button
+                  onClick={() => setShowOnlinePanel(v => !v)}
+                  className="flex items-center gap-2 px-4 py-2.5 text-zinc-700 bg-white border border-zinc-200/80 rounded-2xl hover:bg-zinc-50 hover:border-zinc-300 transition-all shadow-sm font-bold text-sm"
+                  title="People currently online"
+                >
+                  <span className="relative flex items-center justify-center">
+                    <Users size={16} className="text-emerald-600" />
+                    <span className="absolute -right-1.5 -top-1.5 w-2 h-2 rounded-full bg-emerald-500 ring-2 ring-white"></span>
+                  </span>
+                  {Object.keys(onlineUsers).length} online
+                </button>
+
+                {showOnlinePanel && (
+                  <div className="absolute right-0 top-full mt-2 w-64 bg-white border border-zinc-200 rounded-2xl shadow-xl p-3 z-[80]">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-black uppercase tracking-widest text-zinc-400">Currently Online</span>
+                      <button onClick={() => setShowOnlinePanel(false)} className="text-zinc-400 hover:text-zinc-700"><X size={14}/></button>
+                    </div>
+                    <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                      {Object.keys(onlineUsers).length === 0 ? (
+                        <div className="text-xs text-zinc-400 py-2">No one else is currently online.</div>
+                      ) : (
+                        Object.entries(onlineUsers).map(([name, info]) => (
+                          <div key={name} className="flex items-center justify-between px-2.5 py-2 rounded-xl bg-zinc-50">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0"></span>
+                              <span className="font-bold text-sm text-zinc-800 truncate">{name}</span>
+                              {name === userRole.username && <span className="text-[9px] font-bold text-zinc-400">YOU</span>}
+                            </div>
+                            <span className="text-[9px] font-black uppercase tracking-wider text-zinc-400">{info.role}</span>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <button
+                onClick={markActivityRead}
+                className="relative flex items-center justify-center w-11 h-11 text-zinc-700 bg-white border border-zinc-200/80 rounded-2xl hover:bg-zinc-50 hover:border-zinc-300 transition-all shadow-sm"
+                title={totalActivityUnread > 0 ? `${totalActivityUnread} new activity item${totalActivityUnread === 1 ? '' : 's'}` : 'No new activity'}
+              >
+                <Bell size={17} className={totalActivityUnread > 0 ? 'text-violet-600' : 'text-zinc-500'} />
+                {totalActivityUnread > 0 && (
+                  <span className="absolute -top-1.5 -right-1.5 min-w-[20px] h-5 px-1 bg-rose-500 text-white text-[10px] font-black rounded-full flex items-center justify-center border-2 border-white animate-in zoom-in">
+                    {totalActivityUnread > 99 ? '99+' : totalActivityUnread}
+                  </span>
+                )}
+              </button>
+
               <button onClick={generatePDF} className="flex items-center gap-2 px-4 py-2.5 text-zinc-700 bg-white border border-zinc-200/80 rounded-2xl hover:bg-zinc-50 hover:border-zinc-300 transition-all shadow-sm font-bold text-sm">
                 <FileText size={16} className="text-zinc-500" /> Report
               </button>
@@ -1032,7 +1226,7 @@ export default function App() {
       </main>
 
       {}
-      {userRole.role !== 'guest' && <ChatPanel db={db} appId={appId} userRole={userRole} team={team} showAlert={showAlert} />}
+      {userRole.role !== 'guest' && <ChatPanel db={db} appId={appId} userRole={userRole} team={team} showAlert={showAlert} onlineUsers={onlineUsers} />}
 
       {/* Global Undo Toast */}
       {undoAction && (
@@ -1433,7 +1627,7 @@ function TaskFormModal({ task, onClose, onSave, subgroups, assignees }) {
   );
 }
 
-function ChatPanel({ db, appId, userRole, team, showAlert }) {
+function ChatPanel({ db, appId, userRole, team, showAlert, onlineUsers }) {
   const [isOpen, setIsOpen] = useState(false);
   const [channels, setChannels] = useState([]);
   const [activeChannel, setActiveChannel] = useState(null);
@@ -1469,22 +1663,6 @@ function ChatPanel({ db, appId, userRole, team, showAlert }) {
       osc.stop(ctx.currentTime + 0.5);
     } catch(e) {}
   };
-
-  useEffect(() => {
-    if (!userRole.username) return;
-    const presenceRef = doc(db, 'artifacts', appId, 'public', 'data', 'presence', userRole.username);
-    setDoc(presenceRef, { online: true, lastSeen: serverTimestamp() });
-    
-    const unsubPresence = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'presence'), snap => {
-       const o = {};
-       snap.forEach(d => { if(d.data().online) o[d.id] = true; });
-       setOnlineUsers(o);
-    });
-
-    const handleUnload = () => setDoc(presenceRef, { online: false });
-    window.addEventListener('beforeunload', handleUnload);
-    return () => { window.removeEventListener('beforeunload', handleUnload); setDoc(presenceRef, { online: false }); unsubPresence(); };
-  }, [userRole.username, db, appId]);
 
   useEffect(() => {
     const unsubChannels = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'chatChannels'), (snap) => {
