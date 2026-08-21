@@ -176,6 +176,7 @@ const renderFormattedText = (text) => {
 function RichTextComposer({
   placeholder,
   onSubmit,
+  submitOnEnter = false,
   submitLabel = 'Post',
   cancelLabel = null,
   onCancel = null,
@@ -246,8 +247,22 @@ function RichTextComposer({
   };
 
   const handleKeyDown = (e) => {
-    // Common rich-text shortcuts.
+    // Chat can use Enter to send and Shift+Enter for a new paragraph.
     const mod = e.metaKey || e.ctrlKey;
+    if (submitOnEnter && e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      submit(e);
+      return;
+    }
+
+    // Cmd/Ctrl+Enter is also a convenient explicit send shortcut.
+    if (submitOnEnter && e.key === 'Enter' && mod) {
+      e.preventDefault();
+      submit(e);
+      return;
+    }
+
+    // Common rich-text shortcuts.
     if (mod && e.key.toLowerCase() === 'b') {
       e.preventDefault();
       applyCommand('bold');
@@ -1759,6 +1774,7 @@ function ChatPanel({ db, appId, userRole, team, showAlert }) {
                                       accent="violet"
                                       compact
                                       autoFocus
+                                      submitOnEnter
                                       onSubmit={(text) => sendMessage(text)}
                                     />
                                   </div>
@@ -1771,9 +1787,11 @@ function ChatPanel({ db, appId, userRole, team, showAlert }) {
                   </div>
                   
                   <div className="p-4 bg-white border-t border-zinc-100 shrink-0 pb-[max(env(safe-area-inset-bottom),16px)] sm:pb-4 rounded-b-[2rem]">
+                    {/* Chat: Enter sends; Shift+Enter creates a new paragraph. */}
                     <RichTextComposer
                       placeholder="Type a message..."
                       submitLabel="Send"
+                      submitOnEnter
                       onSubmit={sendMessage}
                     />
                   </div>
