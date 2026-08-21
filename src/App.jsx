@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, onAuthStateChanged, signInAnonymously, signInWithCustomToken } from 'firebase/auth';
-import { getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc, updateDoc, getDoc, query, orderBy, addDoc, serverTimestamp } from 'firebase/firestore';
+import { getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc, updateDoc, getDoc, query, orderBy, addDoc, serverTimestamp, writeBatch, deleteField } from 'firebase/firestore';
 import { Calendar as CalendarIcon, Clock, Users, User, LogIn, LogOut, Plus, Download, Upload, FileText, MessageSquare, Trash2, Edit2, AlertCircle, Key, Eye, EyeOff, X, Check, ArrowLeft, Send, Reply, TrendingUp, Smile, Columns3 } from 'lucide-react';
 
 const firebaseConfig = {
@@ -52,6 +52,21 @@ const KANBAN_COLUMNS = [
 ];
 
 const getTaskStatus = (task) => task?.status || 'todo';
+
+const getTaskBoardOrder = (task) => {
+  const value = Number(task?.boardOrder);
+  return Number.isFinite(value) ? value : Number.MAX_SAFE_INTEGER;
+};
+
+const sortKanbanTasks = (a, b) => {
+  const ao = getTaskBoardOrder(a);
+  const bo = getTaskBoardOrder(b);
+  if (ao !== bo) return ao - bo;
+  const ad = a?.startDate || '';
+  const bd = b?.startDate || '';
+  if (ad !== bd) return ad.localeCompare(bd);
+  return (a?.name || '').localeCompare(b?.name || '');
+};
 
 const renderReactions = (reactions, onToggle, isMe) => {
   if (!reactions) return null;
@@ -160,10 +175,13 @@ export default function App() {
   }, []); // Run exactly once on mount, regardless of login state!
 
   useEffect(() => {
-    if (undoAction) {
-       const timer = setTimeout(() => setUndoAction(null), 7000);
-       return () => clearTimeout(timer);
-    }
+    if (!undoAction) return;
+
+    const timer = window.setTimeout(() => {
+      setUndoAction(null);
+    }, 5000);
+
+    return () => window.clearTimeout(timer);
   }, [undoAction]);
 
   useEffect(() => {
@@ -368,6 +386,11 @@ export default function App() {
     const task = { ...taskData, id, color: taskData.color || getTaskColor(id) };
     if (!task.progress) task.progress = 0;
     if (!task.status) task.status = 'todo';
+    if (!Number.isFinite(Number(task.boardOrder))) {
+      const sameColumn = tasks.filter(t => getTaskStatus(t) === task.status && t.id !== id);
+      const maxOrder = sameColumn.reduce((max, t) => Math.max(max, getTaskBoardOrder(t)), -1);
+      task.boardOrder = maxOrder + 1;
+    }
     if (!task.comments) task.comments = [];
     if (!task.updates) task.updates = [];
     try {
@@ -429,17 +452,25 @@ export default function App() {
     if (oldStatus === newStatus) return true;
 
     try {
+      const targetTasks = tasks.filter(t => getTaskStatus(t) === newStatus && t.id !== taskId);
+      const maxOrder = targetTasks.reduce((max, t) => Math.max(max, getTaskBoardOrder(t)), -1);
+      const newBoardOrder = maxOrder + 1;
+      const oldBoardOrder = Number.isFinite(Number(task.boardOrder)) ? Number(task.boardOrder) : null;
+
       await updateDoc(
         doc(db, 'artifacts', appId, 'public', 'data', 'tasks', taskId),
-        { status: newStatus }
+        { status: newStatus, boardOrder: newBoardOrder }
       );
 
       setUndoAction({
         message: `Moved task "${task.name}" to ${KANBAN_COLUMNS.find(c => c.id === newStatus)?.label || newStatus}`,
         action: async () => {
+          const undoPayload = { status: oldStatus };
+          if (oldBoardOrder === null) undoPayload.boardOrder = deleteField();
+          else undoPayload.boardOrder = oldBoardOrder;
           await updateDoc(
             doc(db, 'artifacts', appId, 'public', 'data', 'tasks', taskId),
-            { status: oldStatus }
+            undoPayload
           );
         }
       });
@@ -447,6 +478,73 @@ export default function App() {
     } catch (err) {
       console.error('Failed to update task status:', err);
       showAlert('Error', 'Could not move the task. Please try again.', true);
+      return false;
+    }
+  };
+
+  const reorderKanbanTask = async (taskId, targetStatus, targetIndex) => {
+    const movingTask = tasks.find(t => t.id === taskId);
+    if (!movingTask || !canEditTask(movingTask)) {
+      showAlert('Access Denied', "You don't have permission to reorder this task.", true);
+      return false;
+    }
+
+    const oldStatus = getTaskStatus(movingTask);
+    const oldOrders = {};
+    tasks.forEach(t => { oldOrders[t.id] = { status: getTaskStatus(t), boardOrder: getTaskBoardOrder(t) }; });
+
+    const sourceList = tasks
+      .filter(t => getTaskStatus(t) === oldStatus && t.id !== taskId)
+      .sort(sortKanbanTasks);
+
+    const targetList = (oldStatus === targetStatus ? sourceList : tasks
+      .filter(t => getTaskStatus(t) === targetStatus && t.id !== taskId)
+      .sort(sortKanbanTasks));
+
+    const clampedIndex = Math.max(0, Math.min(Number(targetIndex) || 0, targetList.length));
+    targetList.splice(clampedIndex, 0, movingTask);
+
+    const writes = [];
+    targetList.forEach((task, index) => {
+      writes.push({ id: task.id, status: targetStatus, boardOrder: index });
+    });
+
+    if (oldStatus !== targetStatus) {
+      sourceList.forEach((task, index) => {
+        writes.push({ id: task.id, status: oldStatus, boardOrder: index });
+      });
+    }
+
+    try {
+      const batch = writeBatch(db);
+      writes.forEach(w => {
+        batch.update(doc(db, 'artifacts', appId, 'public', 'data', 'tasks', w.id), {
+          status: w.status,
+          boardOrder: w.boardOrder
+        });
+      });
+      await batch.commit();
+
+      setUndoAction({
+        message: `Reordered "${movingTask.name}"`,
+        action: async () => {
+          const undoBatch = writeBatch(db);
+          const affectedIds = new Set(writes.map(w => w.id));
+          affectedIds.forEach(id => {
+            const previous = oldOrders[id];
+            if (!previous) return;
+            undoBatch.update(doc(db, 'artifacts', appId, 'public', 'data', 'tasks', id), {
+              status: previous.status,
+              boardOrder: previous.boardOrder === Number.MAX_SAFE_INTEGER ? 0 : previous.boardOrder
+            });
+          });
+          await undoBatch.commit();
+        }
+      });
+      return true;
+    } catch (err) {
+      console.error('Failed to reorder Kanban task:', err);
+      showAlert('Error', 'Could not save the new task priority.', true);
       return false;
     }
   };
@@ -761,6 +859,10 @@ export default function App() {
                 canEditTask={canEditTask}
                 onTaskClick={(t) => { if(canEditTask(t)) { setEditingTask(t); setShowTaskModal(true); } else { showAlert("Access Denied", "You don't have permission to edit this task."); } }}
                 onTaskStatusChange={updateTaskStatus}
+                onTaskReorder={reorderKanbanTask}
+                localSlider={localSlider}
+                setLocalSlider={setLocalSlider}
+                onProgressRequest={(task, newProgress) => setProgressUpdate({ task, newProgress })}
                 boardHeight={boardHeight}
                 onBoardHeightChange={setBoardHeight}
                 maximized={boardMaximized}
@@ -1275,62 +1377,71 @@ function TaskFormModal({ task, onClose, onSave, subgroups, assignees }) {
   };
 
   return (
-    <div className="fixed inset-0 bg-zinc-900/20 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
-      <div className="bg-white rounded-[2rem] shadow-2xl border border-zinc-100 w-full max-w-md p-8 max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-200 custom-scrollbar">
-        <h2 className="text-xl font-black tracking-tight mb-6 text-zinc-900">{task && task.id ? 'Edit Task' : 'New Task'}</h2>
-        <form onSubmit={handleSubmit} className="space-y-5">
+    <div
+      className="fixed inset-0 bg-zinc-900/20 backdrop-blur-sm flex items-center justify-center p-4 z-[120] animate-in fade-in duration-200"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+      onTouchStart={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+      role="presentation"
+    >
+      <div className="bg-white rounded-[1.5rem] shadow-2xl border border-zinc-100 w-full max-w-md p-6 max-h-[78vh] overflow-y-auto animate-in zoom-in-95 duration-200 custom-scrollbar">
+        <h2 className="text-lg font-black tracking-tight mb-4 text-zinc-900">{task && task.id ? 'Edit Task' : 'New Task'}</h2>
+        <form onSubmit={handleSubmit} className="space-y-3.5">
           <div>
-            <label className="block text-xs font-bold text-zinc-700 mb-1.5 ml-1 uppercase tracking-wider">Task Name</label>
-            <input type="text" required autoFocus value={name} onChange={e => setName(e.target.value)} className="w-full p-4 bg-zinc-50 border border-zinc-200 rounded-2xl focus:bg-white focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 outline-none transition-all font-semibold text-sm shadow-sm" />
+            <label className="block text-xs font-bold text-zinc-700 mb-1 ml-1 uppercase tracking-wider">Task Name</label>
+            <input type="text" required autoFocus value={name} onChange={e => setName(e.target.value)} className="w-full p-3 bg-zinc-50 border border-zinc-200 rounded-2xl focus:bg-white focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 outline-none transition-all font-semibold text-sm shadow-sm" />
           </div>
           <div>
-            <label className="block text-xs font-bold text-zinc-700 mb-1.5 ml-1 uppercase tracking-wider">Subgroup</label>
-            <select value={subgroupMode === 'new' ? 'NEW' : subgroupSelect} onChange={e => { if(e.target.value === 'NEW') setSubgroupMode('new'); else { setSubgroupMode('existing'); setSubgroupSelect(e.target.value); } }} className="w-full p-4 bg-zinc-50 border border-zinc-200 rounded-2xl focus:bg-white focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 outline-none transition-all font-semibold mb-3 cursor-pointer text-sm shadow-sm">
+            <label className="block text-xs font-bold text-zinc-700 mb-1 ml-1 uppercase tracking-wider">Subgroup</label>
+            <select value={subgroupMode === 'new' ? 'NEW' : subgroupSelect} onChange={e => { if(e.target.value === 'NEW') setSubgroupMode('new'); else { setSubgroupMode('existing'); setSubgroupSelect(e.target.value); } }} className="w-full p-3 bg-zinc-50 border border-zinc-200 rounded-2xl focus:bg-white focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 outline-none transition-all font-semibold mb-3 cursor-pointer text-sm shadow-sm">
               {subgroups.map(sg => <option key={sg} value={sg}>{sg}</option>)}
               <option value="NEW" className="font-bold text-violet-600">+ Create New Subgroup...</option>
             </select>
-            {subgroupMode === 'new' && <input type="text" required placeholder="Type new subgroup name..." value={subgroupNew} onChange={e => setSubgroupNew(e.target.value)} className="w-full p-4 bg-white border border-violet-300 rounded-2xl focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 outline-none transition-all font-semibold shadow-sm text-sm" />}
+            {subgroupMode === 'new' && <input type="text" required placeholder="Type new subgroup name..." value={subgroupNew} onChange={e => setSubgroupNew(e.target.value)} className="w-full p-3 bg-white border border-violet-300 rounded-2xl focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 outline-none transition-all font-semibold shadow-sm text-sm" />}
           </div>
           <div>
-            <label className="block text-xs font-bold text-zinc-700 mb-1.5 ml-1 uppercase tracking-wider">Assignee</label>
-            <select value={assignee} onChange={e => setAssignee(e.target.value)} className="w-full p-4 bg-zinc-50 border border-zinc-200 rounded-2xl outline-none focus:bg-white transition-all font-semibold cursor-pointer text-sm shadow-sm">
+            <label className="block text-xs font-bold text-zinc-700 mb-1 ml-1 uppercase tracking-wider">Assignee</label>
+            <select value={assignee} onChange={e => setAssignee(e.target.value)} className="w-full p-3 bg-zinc-50 border border-zinc-200 rounded-2xl outline-none focus:bg-white transition-all font-semibold cursor-pointer text-sm shadow-sm">
               {assignees.map(a => <option key={a} value={a}>{a}</option>)}
             </select>
           </div>
           <div>
-            <label className="block text-xs font-bold text-zinc-700 mb-1.5 ml-1 uppercase tracking-wider">Board Status</label>
-            <select value={status} onChange={e => setStatus(e.target.value)} className="w-full p-4 bg-zinc-50 border border-zinc-200 rounded-2xl outline-none focus:bg-white focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 transition-all font-semibold cursor-pointer text-sm shadow-sm">
+            <label className="block text-xs font-bold text-zinc-700 mb-1 ml-1 uppercase tracking-wider">Board Status</label>
+            <select value={status} onChange={e => setStatus(e.target.value)} className="w-full p-3 bg-zinc-50 border border-zinc-200 rounded-2xl outline-none focus:bg-white focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 transition-all font-semibold cursor-pointer text-sm shadow-sm">
               {KANBAN_COLUMNS.map(column => <option key={column.id} value={column.id}>{column.label}</option>)}
             </select>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-bold text-zinc-700 mb-1.5 ml-1 uppercase tracking-wider">Start Date</label>
-              <input type="date" required value={startDate} onChange={e => { setStartDate(e.target.value); if (endDate && e.target.value > endDate) setEndDate(e.target.value); }} className="w-full p-4 bg-zinc-50 border border-zinc-200 rounded-2xl outline-none focus:bg-white transition-all font-semibold text-sm shadow-sm" />
+              <label className="block text-xs font-bold text-zinc-700 mb-1 ml-1 uppercase tracking-wider">Start Date</label>
+              <input type="date" required value={startDate} onChange={e => { setStartDate(e.target.value); if (endDate && e.target.value > endDate) setEndDate(e.target.value); }} className="w-full p-3 bg-zinc-50 border border-zinc-200 rounded-2xl outline-none focus:bg-white transition-all font-semibold text-sm shadow-sm" />
             </div>
             <div>
-              <label className="block text-xs font-bold text-zinc-700 mb-1.5 ml-1 uppercase tracking-wider">End Date</label>
-              <input type="date" required min={startDate} value={endDate} onChange={e => setEndDate(e.target.value)} className="w-full p-4 bg-zinc-50 border border-zinc-200 rounded-2xl outline-none focus:bg-white transition-all font-semibold text-sm shadow-sm" />
+              <label className="block text-xs font-bold text-zinc-700 mb-1 ml-1 uppercase tracking-wider">End Date</label>
+              <input type="date" required min={startDate} value={endDate} onChange={e => setEndDate(e.target.value)} className="w-full p-3 bg-zinc-50 border border-zinc-200 rounded-2xl outline-none focus:bg-white transition-all font-semibold text-sm shadow-sm" />
             </div>
           </div>
           
-          <div className="pt-4 border-t border-zinc-100">
-             <label className="block text-xs font-bold text-zinc-700 mb-3 ml-1 uppercase tracking-wider">Task Color</label>
-             <div className="flex flex-wrap gap-2.5 mb-4">
+          <div className="pt-3 border-t border-zinc-100">
+             <label className="block text-xs font-bold text-zinc-700 mb-2 ml-1 uppercase tracking-wider">Task Color</label>
+             <div className="flex flex-wrap gap-2 mb-3">
                 {presetColors.map(c => (
-                   <button key={c} type="button" onClick={() => setColor(c)} className={`w-8 h-8 rounded-full border-2 transition-all duration-200 ${color === c ? 'border-zinc-900 scale-110 shadow-md' : 'border-transparent hover:scale-110 hover:shadow-sm'}`} style={{backgroundColor: c}}></button>
+                   <button key={c} type="button" onClick={() => setColor(c)} className={`w-7 h-7 rounded-full border-2 transition-all duration-200 ${color === c ? 'border-zinc-900 scale-110 shadow-md' : 'border-transparent hover:scale-110 hover:shadow-sm'}`} style={{backgroundColor: c}}></button>
                 ))}
              </div>
              <div className="flex items-center gap-3 bg-zinc-50 p-3 rounded-2xl border border-zinc-200 w-max shadow-sm">
                 <span className="text-xs font-bold text-zinc-500 uppercase tracking-wider ml-1">Custom:</span>
-                <input type="color" value={color} onChange={e => setColor(e.target.value)} className="w-8 h-8 rounded-lg cursor-pointer border-0 p-0 bg-transparent" />
+                <input type="color" value={color} onChange={e => setColor(e.target.value)} className="w-7 h-7 rounded-lg cursor-pointer border-0 p-0 bg-transparent" />
              </div>
           </div>
 
-          <div className="flex justify-end gap-3 mt-8 pt-4 border-t border-zinc-100">
-            <button type="button" onClick={onClose} className="px-5 py-2.5 text-zinc-600 font-bold hover:bg-zinc-50 border border-transparent hover:border-zinc-200 rounded-2xl transition-colors text-sm">Cancel</button>
-            <button type="submit" className="px-6 py-2.5 bg-zinc-900 text-white font-bold rounded-2xl hover:bg-zinc-800 transition-all shadow-md shadow-zinc-900/30 text-sm">Save Task</button>
+          <div className="flex justify-end gap-3 mt-8 pt-3 border-t border-zinc-100">
+            <button type="button" onClick={onClose} className="px-4 py-2 text-zinc-600 font-bold hover:bg-zinc-50 border border-transparent hover:border-zinc-200 rounded-2xl transition-colors text-sm">Cancel</button>
+            <button type="submit" className="px-5 py-2 bg-zinc-900 text-white font-bold rounded-2xl hover:bg-zinc-800 transition-all shadow-md shadow-zinc-900/30 text-sm">Save Task</button>
           </div>
         </form>
       </div>
@@ -1653,9 +1764,11 @@ function ChatPanel({ db, appId, userRole, team, showAlert, onlineUsers }) {
   );
 }
 
-function KanbanBoard({ tasks, canEditTask, onTaskClick, onTaskStatusChange, boardHeight, onBoardHeightChange, maximized, onMaximize, onRestore }) {
+function KanbanBoard({ tasks, canEditTask, onTaskClick, onTaskStatusChange, onTaskReorder, localSlider, setLocalSlider, onProgressRequest, boardHeight, onBoardHeightChange, maximized, onMaximize, onRestore }) {
+  const sliderPointerActiveRef = useRef(false);
   const [draggedTaskId, setDraggedTaskId] = useState(null);
   const [activeDropZone, setActiveDropZone] = useState(null);
+  const [dropIndicator, setDropIndicator] = useState(null);
   const [filter, setFilter] = useState('all');
   const resizeRef = useRef(null);
 
@@ -1704,20 +1817,62 @@ function KanbanBoard({ tasks, canEditTask, onTaskClick, onTaskStatusChange, boar
     setActiveDropZone(null);
   };
 
+  const getDropIndexFromPointer = (container, orderedTasks, clientY) => {
+    if (!orderedTasks.length) return 0;
+
+    for (let i = 0; i < orderedTasks.length; i++) {
+      const card = container.querySelector(`[data-kanban-task-id=\"${CSS.escape(orderedTasks[i].id)}\"]`);
+      if (!card) continue;
+      const rect = card.getBoundingClientRect();
+      const midpoint = rect.top + rect.height / 2;
+      if (clientY < midpoint) return i;
+    }
+
+    return orderedTasks.length;
+  };
+
   const handleDrop = async (e, status) => {
     e.preventDefault();
+    e.stopPropagation();
+
     const taskId = e.dataTransfer.getData('text/task-id');
-    setActiveDropZone(null);
     if (!taskId) return;
 
-    const task = tasks.find(t => t.id === taskId);
-    if (!task || !canEditTask(task)) return;
+    const container = e.currentTarget.querySelector('.kanban-column-content');
+    const ordered = tasks
+      .filter(t => getTaskStatus(t) === status && t.id !== taskId)
+      .sort(sortKanbanTasks);
 
-    const oldStatus = getTaskStatus(task);
+    // Calculate from the actual drop position rather than relying only on
+    // the last React state update. This makes the very top position reliable.
+    const computedIndex = container
+      ? getDropIndexFromPointer(container, ordered, e.clientY)
+      : ordered.length;
+
+    setActiveDropZone(null);
+    setDropIndicator(null);
+    await onTaskReorder(taskId, status, computedIndex);
     setDraggedTaskId(null);
-    if (oldStatus !== status) {
-      await onTaskStatusChange(taskId, status);
-    }
+  };
+
+  const handleCardDragOver = (e, status, taskId) => {
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = 'move';
+
+    const card = e.currentTarget;
+    const rect = card.getBoundingClientRect();
+    const ordered = tasks.filter(t => getTaskStatus(t) === status).sort(sortKanbanTasks);
+    const currentIndex = ordered.findIndex(t => t.id === taskId);
+
+    if (currentIndex < 0) return;
+
+    const insertIndex = e.clientY < (rect.top + rect.height / 2)
+      ? currentIndex
+      : currentIndex + 1;
+
+    setActiveDropZone(status);
+    setDropIndicator({ status, index: insertIndex, taskId });
   };
 
   const formatShortDate = (dateStr) => {
@@ -1749,16 +1904,47 @@ function KanbanBoard({ tasks, canEditTask, onTaskClick, onTaskStatusChange, boar
       <div className="flex-1 overflow-x-auto overflow-y-hidden custom-scrollbar pb-2 min-h-0">
         <div className="grid grid-cols-5 gap-3 min-w-[1180px] h-full">
           {KANBAN_COLUMNS.map(column => {
-            const columnTasks = visibleTasks.filter(task => getTaskStatus(task) === column.id);
+            const columnTasks = visibleTasks.filter(task => getTaskStatus(task) === column.id).sort(sortKanbanTasks);
             const totalColumnTasks = tasks.filter(task => getTaskStatus(task) === column.id).length;
             const isActive = activeDropZone === column.id;
 
             return (
               <div
                 key={column.id}
-                onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setActiveDropZone(column.id); }}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  e.dataTransfer.dropEffect = 'move';
+                  setActiveDropZone(column.id);
+
+                  if (!columnTasks.length) {
+                    setDropIndicator({ status: column.id, index: 0, taskId: null });
+                    return;
+                  }
+
+                  const content = e.currentTarget.querySelector('.kanban-column-content');
+                  const firstCard = content?.querySelector('[data-kanban-task-id]');
+
+                  // Explicitly expose the insertion point above the first card.
+                  if (firstCard) {
+                    const firstRect = firstCard.getBoundingClientRect();
+                    if (e.clientY < firstRect.top + Math.min(28, firstRect.height / 2)) {
+                      setDropIndicator({ status: column.id, index: 0, taskId: columnTasks[0]?.id || null });
+                      return;
+                    }
+                  }
+
+                  // If the pointer is truly over empty space after the cards,
+                  // indicate an insertion at the end.
+                  const lastCard = content?.querySelector('[data-kanban-task-id]:last-of-type');
+                  if (lastCard) {
+                    const lastRect = lastCard.getBoundingClientRect();
+                    if (e.clientY > lastRect.bottom) {
+                      setDropIndicator({ status: column.id, index: columnTasks.length, taskId: null });
+                    }
+                  }
+                }}
                 onDragEnter={(e) => { e.preventDefault(); setActiveDropZone(column.id); }}
-                onDragLeave={(e) => { if (e.currentTarget === e.target) setActiveDropZone(null); }}
+                onDragLeave={(e) => { if (e.currentTarget === e.target) { setActiveDropZone(null); setDropIndicator(null); } }}
                 onDrop={(e) => handleDrop(e, column.id)}
                 className={`flex flex-col min-h-0 rounded-2xl border transition-all ${column.bg} ${isActive ? 'border-violet-400 ring-2 ring-violet-200 scale-[1.01]' : 'border-zinc-200/60'}`}
               >
@@ -1770,21 +1956,70 @@ function KanbanBoard({ tasks, canEditTask, onTaskClick, onTaskStatusChange, boar
                   <span className="text-[10px] font-black text-zinc-500 bg-white px-2 py-1 rounded-lg border border-zinc-200/60">{totalColumnTasks}</span>
                 </div>
 
-                <div className="flex-1 overflow-y-auto p-2.5 space-y-2.5 custom-scrollbar">
+                <div className="kanban-column-content flex-1 overflow-y-auto p-2.5 space-y-2.5 custom-scrollbar relative">
+                  {/* Dedicated top drop target: a real droppable surface above the first card.
+                      This avoids relying on the tiny gap before the first card, which browsers can
+                      make difficult to hit during native drag-and-drop. */}
+                  {draggedTaskId && columnTasks.length > 0 && (
+                    <div
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        e.dataTransfer.dropEffect = 'move';
+                        setActiveDropZone(column.id);
+                        setDropIndicator({ status: column.id, index: 0, taskId: columnTasks[0]?.id || null });
+                      }}
+                      onDrop={async (e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        const taskId = e.dataTransfer.getData('text/task-id') || draggedTaskId;
+                        if (!taskId) return;
+                        setActiveDropZone(null);
+                        setDropIndicator(null);
+                        await onTaskReorder(taskId, column.id, 0);
+                        setDraggedTaskId(null);
+                      }}
+                      className={`h-7 -mb-1 rounded-lg border-2 border-dashed transition-colors flex items-center justify-center text-[9px] font-black uppercase tracking-wider ${
+                        dropIndicator?.status === column.id && dropIndicator?.index === 0
+                          ? 'border-violet-400 bg-violet-50 text-violet-600'
+                          : 'border-transparent text-transparent'
+                      }`}
+                    >
+                      Drop here for #1 priority
+                    </div>
+                  )}
+
                   {columnTasks.length === 0 ? (
                     <div className={`h-24 rounded-xl border-2 border-dashed flex items-center justify-center text-[10px] font-bold text-zinc-400 ${isActive ? 'border-violet-300 bg-violet-50' : 'border-zinc-200/70 bg-white/30'}`}>
                       {isActive ? 'Drop here' : 'No tasks'}
                     </div>
                   ) : (
-                    columnTasks.map(task => {
+                    <>
+                      {columnTasks.map((task, taskIndex) => {
                       const editable = canEditTask(task);
+                      const showBefore = dropIndicator?.status === column.id && dropIndicator?.index === taskIndex && dropIndicator?.taskId !== task.id;
                       const progress = task.progress || 0;
                       return (
-                        <div
-                          key={task.id}
-                          draggable={editable}
-                          onDragStart={(e) => handleDragStart(e, task)}
+                        <React.Fragment key={task.id}>
+                          {showBefore && (
+                            <div className="h-1 rounded-full bg-violet-500 shadow-[0_0_0_2px_rgba(139,92,246,0.15)] my-1" />
+                          )}
+                          <div
+                            key={task.id}
+                            data-kanban-task-id={task.id}
+                            draggable={editable}
+                          onDragStart={(e) => {
+                            // Never start a Kanban card drag when the slider interaction is active.
+                            const target = e.target;
+                            if (sliderPointerActiveRef.current || (target && typeof target.closest === 'function' && target.closest('input[type="range"]'))) {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              return;
+                            }
+                            handleDragStart(e, task);
+                          }}
                           onDragEnd={handleDragEnd}
+                          onDragOver={(e) => handleCardDragOver(e, column.id, task.id)}
                           onClick={() => onTaskClick(task)}
                           className={`bg-white rounded-xl border border-zinc-200/70 shadow-sm p-3.5 transition-all ${editable ? 'cursor-grab active:cursor-grabbing hover:shadow-md hover:border-violet-300' : 'cursor-pointer'} ${draggedTaskId === task.id ? 'opacity-40 scale-95' : ''}`}
                         >
@@ -1803,14 +2038,67 @@ function KanbanBoard({ tasks, canEditTask, onTaskClick, onTaskStatusChange, boar
                             <span>{formatShortDate(task.startDate)}–{formatShortDate(task.endDate)}</span>
                           </div>
 
-                          <div className="mt-3">
+                          <div className="mt-3" onClick={(e) => e.stopPropagation()}>
                             <div className="flex justify-between items-center mb-1.5">
                               <span className="text-[9px] font-black uppercase tracking-wider text-zinc-400">Progress</span>
-                              <span className="text-[10px] font-black text-zinc-700">{progress}%</span>
+                              <span className="text-[10px] font-black text-zinc-700">{localSlider?.[task.id] ?? progress}%</span>
                             </div>
-                            <div className="h-1.5 rounded-full bg-zinc-100 overflow-hidden">
-                              <div className="h-full rounded-full" style={{ width: `${progress}%`, backgroundColor: task.color || getTaskColor(task.id) }}></div>
-                            </div>
+                            <input
+                              type="range"
+                              min="0"
+                              max="100"
+                              step="5"
+                              value={localSlider?.[task.id] ?? progress}
+                              disabled={!editable}
+                              draggable="false"
+                              onClick={(e) => e.stopPropagation()}
+                              onPointerDown={(e) => {
+                                // Claim the pointer for the slider before the draggable card can react.
+                                sliderPointerActiveRef.current = true;
+                                e.stopPropagation();
+                                if (typeof e.currentTarget.setPointerCapture === 'function') {
+                                  try { e.currentTarget.setPointerCapture(e.pointerId); } catch (_) {}
+                                }
+                              }}
+                              onMouseDown={(e) => {
+                                // Native HTML5 drag can begin from the card even when React propagation is stopped.
+                                sliderPointerActiveRef.current = true;
+                                e.stopPropagation();
+                              }}
+                              onChange={(e) => {
+                                e.stopPropagation();
+                                setLocalSlider(prev => ({ ...prev, [task.id]: parseInt(e.target.value, 10) }));
+                              }}
+                              onPointerUp={(e) => {
+                                e.stopPropagation();
+                                const newProgress = parseInt(e.currentTarget.value, 10);
+                                if (newProgress !== progress && editable) {
+                                  onProgressRequest(task, newProgress);
+                                }
+                                sliderPointerActiveRef.current = false;
+                              }}
+                              onPointerCancel={(e) => {
+                                e.stopPropagation();
+                                sliderPointerActiveRef.current = false;
+                              }}
+                              onBlur={() => {
+                                sliderPointerActiveRef.current = false;
+                              }}
+                              onDragStart={(e) => {
+                                // Prevent the range input itself from ever initiating HTML5 dragging.
+                                e.preventDefault();
+                                e.stopPropagation();
+                                sliderPointerActiveRef.current = true;
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter' || e.key === ' ') e.stopPropagation();
+                              }}
+                              className="w-full h-1.5 rounded-full appearance-none cursor-pointer accent-violet-600 bg-zinc-100"
+                              style={{
+                                background: `linear-gradient(to right, ${task.color || getTaskColor(task.id)} ${localSlider?.[task.id] ?? progress}%, #f4f4f5 ${localSlider?.[task.id] ?? progress}%)`
+                              }}
+                              title={editable ? 'Drag to change progress' : 'Progress'}
+                            />
                           </div>
 
                           <div className="flex items-center justify-between gap-2 mt-3 pt-2.5 border-t border-zinc-100">
@@ -1828,9 +2116,14 @@ function KanbanBoard({ tasks, canEditTask, onTaskClick, onTaskStatusChange, boar
                               <span className={`text-[9px] font-black uppercase tracking-wider ${column.accent}`}>{column.label}</span>
                             )}
                           </div>
-                        </div>
+                          </div>
+                        </React.Fragment>
                       );
-                    })
+                      })}
+                      {dropIndicator?.status === column.id && dropIndicator?.index === columnTasks.length && columnTasks.length > 0 && (
+                        <div className="h-1 rounded-full bg-violet-500 shadow-[0_0_0_2px_rgba(139,92,246,0.15)] my-1" />
+                      )}
+                    </>
                   )}
                 </div>
               </div>
