@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, onAuthStateChanged, signInAnonymously, signInWithCustomToken } from 'firebase/auth';
 import { getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc, updateDoc, getDoc, query, orderBy, addDoc, serverTimestamp } from 'firebase/firestore';
-import { Calendar as CalendarIcon, Clock, Users, User, LogIn, LogOut, Plus, Download, Upload, FileText, MessageSquare, Trash2, Edit2, AlertCircle, Key, Eye, EyeOff, X, Check, ArrowLeft, Send, Reply, TrendingUp, Smile } from 'lucide-react';
+import { Calendar as CalendarIcon, Clock, Users, User, LogIn, LogOut, Plus, Download, Upload, FileText, MessageSquare, Trash2, Edit2, AlertCircle, Key, Eye, EyeOff, X, Check, ArrowLeft, Send, Reply, TrendingUp, Smile, Columns3 } from 'lucide-react';
 
 const firebaseConfig = {
   apiKey: "AIzaSyAKYltJBn7OkCqMjO2NY_c8edWUgPJlgZY",
@@ -42,6 +42,16 @@ const urlify = (text) => {
     part.match(urlRegex) ? <a key={i} href={part} target="_blank" rel="noopener noreferrer" className="text-violet-600 hover:text-violet-700 font-semibold hover:underline transition-colors">{part}</a> : part
   );
 };
+
+const KANBAN_COLUMNS = [
+  { id: 'backlog', label: 'Backlog', accent: 'text-zinc-600', dot: 'bg-zinc-400', bg: 'bg-zinc-50' },
+  { id: 'todo', label: 'To Do', accent: 'text-blue-700', dot: 'bg-blue-500', bg: 'bg-blue-50/50' },
+  { id: 'in-progress', label: 'In Progress', accent: 'text-violet-700', dot: 'bg-violet-500', bg: 'bg-violet-50/50' },
+  { id: 'review', label: 'For Review', accent: 'text-amber-700', dot: 'bg-amber-500', bg: 'bg-amber-50/50' },
+  { id: 'done', label: 'Done', accent: 'text-emerald-700', dot: 'bg-emerald-500', bg: 'bg-emerald-50/50' }
+];
+
+const getTaskStatus = (task) => task?.status || 'todo';
 
 const renderReactions = (reactions, onToggle, isMe) => {
   if (!reactions) return null;
@@ -355,6 +365,7 @@ export default function App() {
     const id = taskData.id || generateId();
     const task = { ...taskData, id, color: taskData.color || getTaskColor(id) };
     if (!task.progress) task.progress = 0;
+    if (!task.status) task.status = 'todo';
     if (!task.comments) task.comments = [];
     if (!task.updates) task.updates = [];
     try {
@@ -401,6 +412,39 @@ export default function App() {
       return true;
     } catch (err) {
       showAlert("Error", "Could not save the new task dates. Please try again.", true);
+      return false;
+    }
+  };
+
+  const updateTaskStatus = async (taskId, newStatus) => {
+    const task = tasks.find(t => t.id === taskId);
+    if (!task || !canEditTask(task)) {
+      showAlert('Access Denied', "You don't have permission to move this task.", true);
+      return false;
+    }
+
+    const oldStatus = getTaskStatus(task);
+    if (oldStatus === newStatus) return true;
+
+    try {
+      await updateDoc(
+        doc(db, 'artifacts', appId, 'public', 'data', 'tasks', taskId),
+        { status: newStatus }
+      );
+
+      setUndoAction({
+        message: `Moved task "${task.name}" to ${KANBAN_COLUMNS.find(c => c.id === newStatus)?.label || newStatus}`,
+        action: async () => {
+          await updateDoc(
+            doc(db, 'artifacts', appId, 'public', 'data', 'tasks', taskId),
+            { status: oldStatus }
+          );
+        }
+      });
+      return true;
+    } catch (err) {
+      console.error('Failed to update task status:', err);
+      showAlert('Error', 'Could not move the task. Please try again.', true);
       return false;
     }
   };
@@ -687,8 +731,9 @@ export default function App() {
                 </div>
               )}
               <div className="flex bg-zinc-50 rounded-2xl p-1.5 border border-zinc-200/60">
-                <button onClick={() => setView('timeline')} className={`px-5 py-2 text-xs font-bold rounded-xl transition-all duration-300 ${view === 'timeline' ? 'bg-white shadow-sm text-zinc-900 border border-zinc-200/50' : 'text-zinc-500 hover:text-zinc-700'}`}>Timeline</button>
-                <button onClick={() => setView('calendar')} className={`px-5 py-2 text-xs font-bold rounded-xl transition-all duration-300 ${view === 'calendar' ? 'bg-white shadow-sm text-zinc-900 border border-zinc-200/50' : 'text-zinc-500 hover:text-zinc-700'}`}>Calendar</button>
+                <button onClick={() => setView('timeline')} className={`px-4 py-2 text-xs font-bold rounded-xl transition-all duration-300 ${view === 'timeline' ? 'bg-white shadow-sm text-zinc-900 border border-zinc-200/50' : 'text-zinc-500 hover:text-zinc-700'}`}>Timeline</button>
+                <button onClick={() => setView('calendar')} className={`px-4 py-2 text-xs font-bold rounded-xl transition-all duration-300 ${view === 'calendar' ? 'bg-white shadow-sm text-zinc-900 border border-zinc-200/50' : 'text-zinc-500 hover:text-zinc-700'}`}>Calendar</button>
+                <button onClick={() => setView('board')} className={`flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-xl transition-all duration-300 ${view === 'board' ? 'bg-white shadow-sm text-zinc-900 border border-zinc-200/50' : 'text-zinc-500 hover:text-zinc-700'}`}><Columns3 size={14}/> Board</button>
               </div>
             </div>
           </div>
@@ -702,11 +747,18 @@ export default function App() {
                 onTaskClick={(t) => { if(canEditTask(t)) { setEditingTask(t); setShowTaskModal(true); } else { showAlert("Access Denied", "You don't have permission to edit this task."); } }} 
                 onTaskCreate={userRole.role !== 'viewer' && userRole.role !== 'guest' ? (dates) => { setEditingTask({ ...dates, name: '', subgroup: subgroups[0] || 'General' }); setShowTaskModal(true); } : undefined}
               />
-            ) : (
+            ) : view === 'calendar' ? (
               <Calendar 
                 tasks={tasks} 
                 onTaskClick={(t) => { if(canEditTask(t)) { setEditingTask(t); setShowTaskModal(true); } else { showAlert("Access Denied", "You don't have permission to edit this task."); } }} 
                 onTaskCreate={userRole.role !== 'viewer' && userRole.role !== 'guest' ? (dates) => { setEditingTask({ ...dates, name: '', subgroup: subgroups[0] || 'General' }); setShowTaskModal(true); } : undefined}
+              />
+            ) : (
+              <KanbanBoard
+                tasks={tasks}
+                canEditTask={canEditTask}
+                onTaskClick={(t) => { if(canEditTask(t)) { setEditingTask(t); setShowTaskModal(true); } else { showAlert("Access Denied", "You don't have permission to edit this task."); } }}
+                onTaskStatusChange={updateTaskStatus}
               />
             )}
           </div>
@@ -1192,6 +1244,7 @@ function TaskFormModal({ task, onClose, onSave, subgroups, assignees }) {
   const [subgroupSelect, setSubgroupSelect] = useState(task?.subgroup || (subgroups[0] || ''));
   const [subgroupNew, setSubgroupNew] = useState('');
   const [assignee, setAssignee] = useState(task?.assignee || assignees[0]);
+  const [status, setStatus] = useState(task?.status || 'todo');
   const [startDate, setStartDate] = useState(task?.startDate || '');
   const [endDate, setEndDate] = useState(task?.endDate || '');
   const [color, setColor] = useState(task?.color || '#7c3aed');
@@ -1211,7 +1264,7 @@ function TaskFormModal({ task, onClose, onSave, subgroups, assignees }) {
     if (startDate > endDate) return alert("End Date must be after Start Date!");
     const finalSubgroup = subgroupMode === 'new' ? subgroupNew : subgroupSelect;
     if (!finalSubgroup.trim()) return alert("Subgroup is required.");
-    onSave({ ...task, name, subgroup: finalSubgroup, assignee, startDate, endDate, color });
+    onSave({ ...task, name, subgroup: finalSubgroup, assignee, status, startDate, endDate, color });
   };
 
   return (
@@ -1237,6 +1290,13 @@ function TaskFormModal({ task, onClose, onSave, subgroups, assignees }) {
               {assignees.map(a => <option key={a} value={a}>{a}</option>)}
             </select>
           </div>
+          <div>
+            <label className="block text-xs font-bold text-zinc-700 mb-1.5 ml-1 uppercase tracking-wider">Board Status</label>
+            <select value={status} onChange={e => setStatus(e.target.value)} className="w-full p-4 bg-zinc-50 border border-zinc-200 rounded-2xl outline-none focus:bg-white focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 transition-all font-semibold cursor-pointer text-sm shadow-sm">
+              {KANBAN_COLUMNS.map(column => <option key={column.id} value={column.id}>{column.label}</option>)}
+            </select>
+          </div>
+
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-bold text-zinc-700 mb-1.5 ml-1 uppercase tracking-wider">Start Date</label>
@@ -1582,6 +1642,161 @@ function ChatPanel({ db, appId, userRole, team, showAlert, onlineUsers }) {
              <span className="absolute -top-1.5 -right-1.5 bg-rose-500 text-white text-xs font-black w-6 h-6 rounded-full flex items-center justify-center border-2 border-white shadow-md animate-in zoom-in">{totalUnread}</span>
           )}
        </button>
+    </div>
+  );
+}
+
+function KanbanBoard({ tasks, canEditTask, onTaskClick, onTaskStatusChange }) {
+  const [draggedTaskId, setDraggedTaskId] = useState(null);
+  const [activeDropZone, setActiveDropZone] = useState(null);
+  const [filter, setFilter] = useState('all');
+
+  const visibleTasks = tasks.filter(task => filter === 'all' || getTaskStatus(task) === filter);
+
+  const handleDragStart = (e, task) => {
+    if (!canEditTask(task)) {
+      e.preventDefault();
+      return;
+    }
+    setDraggedTaskId(task.id);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/task-id', task.id);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedTaskId(null);
+    setActiveDropZone(null);
+  };
+
+  const handleDrop = async (e, status) => {
+    e.preventDefault();
+    const taskId = e.dataTransfer.getData('text/task-id');
+    setActiveDropZone(null);
+    if (!taskId) return;
+
+    const task = tasks.find(t => t.id === taskId);
+    if (!task || !canEditTask(task)) return;
+
+    const oldStatus = getTaskStatus(task);
+    setDraggedTaskId(null);
+    if (oldStatus !== status) {
+      await onTaskStatusChange(taskId, status);
+    }
+  };
+
+  const formatShortDate = (dateStr) => {
+    if (!dateStr) return '';
+    const [y, m, d] = dateStr.split('-');
+    return `${m}/${d}`;
+  };
+
+  return (
+    <div className="h-full flex flex-col min-w-0">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+        <div>
+          <h3 className="text-base font-extrabold text-zinc-900 tracking-tight">Task Board</h3>
+          <p className="text-[11px] font-semibold text-zinc-400 mt-0.5">Drag a task between columns to change its stage.</p>
+        </div>
+        <div className="flex items-center gap-1.5 bg-zinc-50 border border-zinc-200/60 rounded-xl p-1">
+          <button onClick={() => setFilter('all')} className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-colors ${filter === 'all' ? 'bg-white shadow-sm text-zinc-900' : 'text-zinc-400 hover:text-zinc-700'}`}>All</button>
+          {KANBAN_COLUMNS.map(column => (
+            <button key={column.id} onClick={() => setFilter(column.id)} className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-colors ${filter === column.id ? 'bg-white shadow-sm text-zinc-900' : 'text-zinc-400 hover:text-zinc-700'}`}>{column.label}</button>
+          ))}
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-x-auto overflow-y-hidden custom-scrollbar pb-2">
+        <div className="grid grid-cols-5 gap-3 min-w-[1180px] h-full">
+          {KANBAN_COLUMNS.map(column => {
+            const columnTasks = visibleTasks.filter(task => getTaskStatus(task) === column.id);
+            const totalColumnTasks = tasks.filter(task => getTaskStatus(task) === column.id).length;
+            const isActive = activeDropZone === column.id;
+
+            return (
+              <div
+                key={column.id}
+                onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setActiveDropZone(column.id); }}
+                onDragEnter={(e) => { e.preventDefault(); setActiveDropZone(column.id); }}
+                onDragLeave={(e) => { if (e.currentTarget === e.target) setActiveDropZone(null); }}
+                onDrop={(e) => handleDrop(e, column.id)}
+                className={`flex flex-col min-h-0 rounded-2xl border transition-all ${column.bg} ${isActive ? 'border-violet-400 ring-2 ring-violet-200 scale-[1.01]' : 'border-zinc-200/60'}`}
+              >
+                <div className="flex items-center justify-between gap-2 px-3.5 py-3 border-b border-zinc-200/60 bg-white/70 rounded-t-2xl">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className={`w-2.5 h-2.5 rounded-full ${column.dot}`}></span>
+                    <span className={`text-xs font-black uppercase tracking-wider ${column.accent}`}>{column.label}</span>
+                  </div>
+                  <span className="text-[10px] font-black text-zinc-500 bg-white px-2 py-1 rounded-lg border border-zinc-200/60">{totalColumnTasks}</span>
+                </div>
+
+                <div className="flex-1 overflow-y-auto p-2.5 space-y-2.5 custom-scrollbar">
+                  {columnTasks.length === 0 ? (
+                    <div className={`h-24 rounded-xl border-2 border-dashed flex items-center justify-center text-[10px] font-bold text-zinc-400 ${isActive ? 'border-violet-300 bg-violet-50' : 'border-zinc-200/70 bg-white/30'}`}>
+                      {isActive ? 'Drop here' : 'No tasks'}
+                    </div>
+                  ) : (
+                    columnTasks.map(task => {
+                      const editable = canEditTask(task);
+                      const progress = task.progress || 0;
+                      return (
+                        <div
+                          key={task.id}
+                          draggable={editable}
+                          onDragStart={(e) => handleDragStart(e, task)}
+                          onDragEnd={handleDragEnd}
+                          onClick={() => onTaskClick(task)}
+                          className={`bg-white rounded-xl border border-zinc-200/70 shadow-sm p-3.5 transition-all ${editable ? 'cursor-grab active:cursor-grabbing hover:shadow-md hover:border-violet-300' : 'cursor-pointer'} ${draggedTaskId === task.id ? 'opacity-40 scale-95' : ''}`}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex items-start gap-2 min-w-0">
+                              <span className="w-2.5 h-2.5 rounded-full mt-1 shrink-0" style={{ backgroundColor: task.color || getTaskColor(task.id) }}></span>
+                              <div className="min-w-0">
+                                <div className="text-sm font-extrabold text-zinc-900 leading-snug">{task.name}</div>
+                                <div className="text-[10px] font-semibold text-zinc-400 mt-1 truncate">{task.subgroup || 'General'}</div>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center justify-between gap-2 mt-3 text-[10px] font-bold text-zinc-400">
+                            <span className="inline-flex items-center gap-1.5 bg-zinc-50 border border-zinc-200/60 px-2 py-1 rounded-lg text-zinc-600"><User size={10} className="text-violet-600"/>{task.assignee || 'Unassigned'}</span>
+                            <span>{formatShortDate(task.startDate)}–{formatShortDate(task.endDate)}</span>
+                          </div>
+
+                          <div className="mt-3">
+                            <div className="flex justify-between items-center mb-1.5">
+                              <span className="text-[9px] font-black uppercase tracking-wider text-zinc-400">Progress</span>
+                              <span className="text-[10px] font-black text-zinc-700">{progress}%</span>
+                            </div>
+                            <div className="h-1.5 rounded-full bg-zinc-100 overflow-hidden">
+                              <div className="h-full rounded-full" style={{ width: `${progress}%`, backgroundColor: task.color || getTaskColor(task.id) }}></div>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center justify-between gap-2 mt-3 pt-2.5 border-t border-zinc-100">
+                            <span className="text-[10px] font-bold text-zinc-400 flex items-center gap-1"><MessageSquare size={11}/> {task.comments?.length || 0}</span>
+                            {editable ? (
+                              <select
+                                value={getTaskStatus(task)}
+                                onClick={(e) => e.stopPropagation()}
+                                onChange={(e) => onTaskStatusChange(task.id, e.target.value)}
+                                className="text-[9px] font-black uppercase tracking-wider bg-zinc-50 border border-zinc-200 rounded-lg px-2 py-1 text-zinc-600 outline-none"
+                              >
+                                {KANBAN_COLUMNS.map(option => <option key={option.id} value={option.id}>{option.label}</option>)}
+                              </select>
+                            ) : (
+                              <span className={`text-[9px] font-black uppercase tracking-wider ${column.accent}`}>{column.label}</span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
     </div>
   );
 }
